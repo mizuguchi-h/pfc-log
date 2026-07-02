@@ -1,30 +1,32 @@
 // ===== 初期データ(すべてアプリ内で編集可能) =====
 
+// unitGrams: この栄養値が基準とする重量(g)。設定されている食品はタップ時にグラム数を
+// 指定でき、その場でkcal/PFCを按分計算する。個数・パック単位の食品はunitGramsなし(従来通りqtyで加減)
 export const DEFAULT_FOODS = [
-  { id: 'f01', name: '白米 150g', kcal: 234, p: 3.8, f: 0.5, c: 53.4 },
-  { id: 'f02', name: '玄米 150g', kcal: 228, p: 4.2, f: 1.5, c: 47.8 },
-  { id: 'f03', name: 'オートミール 30g', kcal: 105, p: 4.1, f: 1.7, c: 17.9 },
-  { id: 'f04', name: '鶏むね肉(皮なし)100g', kcal: 105, p: 23.3, f: 1.9, c: 0.1 },
+  { id: 'f01', name: '白米 150g', kcal: 234, p: 3.8, f: 0.5, c: 53.4, unitGrams: 150 },
+  { id: 'f02', name: '玄米 150g', kcal: 228, p: 4.2, f: 1.5, c: 47.8, unitGrams: 150 },
+  { id: 'f03', name: 'オートミール 30g', kcal: 105, p: 4.1, f: 1.7, c: 17.9, unitGrams: 30 },
+  { id: 'f04', name: '鶏むね肉(皮なし)100g', kcal: 105, p: 23.3, f: 1.9, c: 0.1, unitGrams: 100 },
   { id: 'f05', name: 'サラダチキン 1個', kcal: 110, p: 24.0, f: 1.2, c: 0.5 },
   { id: 'f06', name: '卵 1個', kcal: 76, p: 6.2, f: 5.2, c: 0.2 },
   { id: 'f07', name: '納豆 1パック', kcal: 95, p: 8.3, f: 5.0, c: 6.1 },
-  { id: 'f08', name: '豆腐 150g', kcal: 84, p: 7.9, f: 5.3, c: 1.2 },
+  { id: 'f08', name: '豆腐 150g', kcal: 84, p: 7.9, f: 5.3, c: 1.2, unitGrams: 150 },
   { id: 'f09', name: '鮭 切り身 1切', kcal: 106, p: 17.8, f: 3.3, c: 0.1 },
   { id: 'f10', name: 'サバ缶(水煮)1缶', kcal: 340, p: 31.2, f: 21.4, c: 0.4 },
   { id: 'f11', name: 'プロテイン 1杯', kcal: 115, p: 22.0, f: 1.5, c: 3.0 },
-  { id: 'f12', name: 'ブロッコリー 100g', kcal: 37, p: 5.4, f: 0.6, c: 6.6 },
+  { id: 'f12', name: 'ブロッコリー 100g', kcal: 37, p: 5.4, f: 0.6, c: 6.6, unitGrams: 100 },
   { id: 'f13', name: '味噌汁 1杯', kcal: 40, p: 3.0, f: 1.2, c: 4.5 },
   { id: 'f14', name: 'バナナ 1本', kcal: 93, p: 1.1, f: 0.2, c: 22.5 },
-  { id: 'f15', name: '無脂肪ヨーグルト 100g', kcal: 56, p: 4.0, f: 0.3, c: 9.6 },
+  { id: 'f15', name: '無脂肪ヨーグルト 100g', kcal: 56, p: 4.0, f: 0.3, c: 9.6, unitGrams: 100 },
   { id: 'f16', name: 'ゆで卵 1個', kcal: 76, p: 6.5, f: 5.0, c: 0.2 },
-  { id: 'f17', name: 'さつまいも 160g', kcal: 211, p: 1.9, f: 0.3, c: 51.0 },
-  { id: 'f18', name: '鶏むね肉(皮なし)220g', kcal: 231, p: 51.3, f: 4.2, c: 0.2 },
-  { id: 'f19', name: '無水カレー(鶏むねひき肉)250g', kcal: 380, p: 28.0, f: 12.0, c: 35.0 },
-  { id: 'f20', name: '茎ブロッコリー 80g', kcal: 24, p: 3.0, f: 0.2, c: 3.8 },
-  { id: 'f21', name: 'ズッキーニ 100g', kcal: 14, p: 1.3, f: 0.1, c: 2.8 },
-  { id: 'f22', name: 'キムチ 30g', kcal: 9, p: 0.6, f: 0.1, c: 1.4 },
-  { id: 'f23', name: 'ご飯 160g', kcal: 250, p: 4.1, f: 0.5, c: 57.0 },
-  { id: 'f24', name: 'ご飯 120g', kcal: 187, p: 3.0, f: 0.4, c: 42.7 },
+  { id: 'f17', name: 'さつまいも 160g', kcal: 211, p: 1.9, f: 0.3, c: 51.0, unitGrams: 160 },
+  { id: 'f18', name: '鶏むね肉(皮なし)220g', kcal: 231, p: 51.3, f: 4.2, c: 0.2, unitGrams: 220 },
+  { id: 'f19', name: '無水カレー(鶏むねひき肉)250g', kcal: 380, p: 28.0, f: 12.0, c: 35.0, unitGrams: 250 },
+  { id: 'f20', name: '茎ブロッコリー 80g', kcal: 24, p: 3.0, f: 0.2, c: 3.8, unitGrams: 80 },
+  { id: 'f21', name: 'ズッキーニ 100g', kcal: 14, p: 1.3, f: 0.1, c: 2.8, unitGrams: 100 },
+  { id: 'f22', name: 'キムチ 30g', kcal: 9, p: 0.6, f: 0.1, c: 1.4, unitGrams: 30 },
+  { id: 'f23', name: 'ご飯 160g', kcal: 250, p: 4.1, f: 0.5, c: 57.0, unitGrams: 160 },
+  { id: 'f24', name: 'ご飯 120g', kcal: 187, p: 3.0, f: 0.4, c: 42.7, unitGrams: 120 },
 ]
 
 // 種目は sets/kg/reps(通常種目) か type:'cardio' + incline/speed/minutes(有酸素) のいずれか

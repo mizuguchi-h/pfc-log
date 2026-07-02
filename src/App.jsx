@@ -183,12 +183,26 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
   const [showCustom, setShowCustom] = useState(false)
   const [custom, setCustom] = useState({ name: '', kcal: '', p: '', f: '', c: '' })
   const [setName, setSetName] = useState('')
+  const [gramFood, setGramFood] = useState(null) // { food, grams } グラム数を指定して追加中の食品
 
   const slotEntries = log.meals.filter((e) => e.slot === slot)
   const slotSets = state.mealSets.filter((ms) => ms.slot === slot)
 
   const addFood = (foodId) =>
     patchLog((l) => ({ ...l, meals: [...l.meals, { id: uid(), slot, foodId, qty: 1 }] }))
+
+  const tapFood = (food) =>
+    food.unitGrams ? setGramFood({ food, grams: String(food.unitGrams) }) : addFood(food.id)
+
+  const confirmGramFood = () => {
+    const g = Number(gramFood.grams)
+    if (!g || g <= 0) return
+    patchLog((l) => ({
+      ...l,
+      meals: [...l.meals, { id: uid(), slot, foodId: gramFood.food.id, qty: g / gramFood.food.unitGrams }],
+    }))
+    setGramFood(null)
+  }
 
   const addCustom = () => {
     if (!custom.name || custom.kcal === '') return
@@ -261,6 +275,8 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
         {slotEntries.length === 0 && <p className="muted">下のリストからタップで追加</p>}
         {slotEntries.map((e) => {
           const m = macrosOf(e, state.foods)
+          const food = e.foodId ? state.foods.find((f) => f.id === e.foodId) : null
+          const amountLabel = food?.unitGrams ? `${Math.round(e.qty * food.unitGrams)}g` : `×${e.qty}`
           return (
             <div className="entry" key={e.id}>
               <div className="entry-main">
@@ -271,7 +287,7 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
               </div>
               <div className="qty">
                 <button onClick={() => setQty(e.id, -0.5)}>−</button>
-                <span>×{e.qty}</span>
+                <span>{amountLabel}</span>
                 <button onClick={() => setQty(e.id, 0.5)}>＋</button>
               </div>
               <button className="del" onClick={() => remove(e.id)}>✕</button>
@@ -327,13 +343,40 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
         )}
         <div className="foodgrid">
           {state.foods.map((f) => (
-            <button key={f.id} className="food" onClick={() => addFood(f.id)}>
+            <button key={f.id} className="food" onClick={() => tapFood(f)}>
               <span>{f.name}</span>
-              <span className="muted small">{f.kcal}kcal</span>
+              <span className="muted small">{f.kcal}kcal{f.unitGrams ? `/${f.unitGrams}g` : ''}</span>
             </button>
           ))}
         </div>
       </section>
+
+      {gramFood && (
+        <div className="modal-back" onClick={() => setGramFood(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <header className="pagehead">
+              <h1>{gramFood.food.name}</h1>
+              <button className="ghost" onClick={() => setGramFood(null)}>閉じる</button>
+            </header>
+            <div className="row">
+              <input type="number" inputMode="decimal" autoFocus value={gramFood.grams}
+                onChange={(e) => setGramFood({ ...gramFood, grams: e.target.value })} />
+              <span className="muted">g</span>
+            </div>
+            {(() => {
+              const g = Number(gramFood.grams) || 0
+              const ratio = g / gramFood.food.unitGrams
+              return (
+                <p className="muted small">
+                  {Math.round(gramFood.food.kcal * ratio)}kcal
+                  {' '}/ P{(gramFood.food.p * ratio).toFixed(1)} F{(gramFood.food.f * ratio).toFixed(1)} C{(gramFood.food.c * ratio).toFixed(1)}
+                </p>
+              )
+            })()}
+            <button className="primary wide" onClick={confirmGramFood}>追加</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

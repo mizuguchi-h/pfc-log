@@ -11,12 +11,15 @@ export const todayKey = (d = new Date()) => {
   return `${y}-${m}-${dd}`
 }
 
-// 保存済みリストに、まだ無いデフォルト項目だけをidで補って追加する
-// (コード側で追加した食品/献立セットが、既存端末のデータにも反映されるように)
+// 保存済みリストに、まだ無いデフォルト項目をidで補って追加し、既存項目にも
+// デフォルト側の新しいフィールド(unitGrams追加など)を不足分だけ補う
+// (コード側の更新が、既存端末のデータにも反映されるように。編集UIが無い項目が対象なので上書きしても安全)
 function mergeById(defaults, saved) {
   const list = saved || []
+  const byId = new Map(defaults.map((d) => [d.id, d]))
+  const merged = list.map((item) => (byId.has(item.id) ? { ...byId.get(item.id), ...item } : item))
   const ids = new Set(list.map((x) => x.id))
-  return [...list, ...defaults.filter((d) => !ids.has(d.id))]
+  return [...merged, ...defaults.filter((d) => !ids.has(d.id))]
 }
 
 export function loadState() {
