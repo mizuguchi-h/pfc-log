@@ -466,7 +466,7 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
               {ex.sets.map((st, j) => (
                 <div className="setrow" key={j}>
                   <span className="muted">{j + 1}</span>
-                  <input type="number" inputMode="decimal" value={st.kg}
+                  <input type="number" inputMode="decimal" step="0.25" value={st.kg}
                     onChange={(e) => updateSet(i, j, 'kg', e.target.value)} />
                   <input type="number" inputMode="numeric" value={st.reps}
                     onChange={(e) => updateSet(i, j, 'reps', e.target.value)} />
