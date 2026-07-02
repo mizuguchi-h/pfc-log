@@ -23,21 +23,21 @@ export const DEFAULT_MENUS = {
   A: {
     name: '全身法 A',
     exercises: [
-      { name: 'スクワット', sets: 3, reps: 8 },
-      { name: 'ベンチプレス', sets: 3, reps: 8 },
-      { name: 'ラットプルダウン', sets: 3, reps: 10 },
-      { name: 'ショルダープレス', sets: 3, reps: 10 },
-      { name: 'レッグカール', sets: 3, reps: 12 },
+      { name: 'スクワット', sets: 3, kg: 40, reps: 8 },
+      { name: 'ベンチプレス', sets: 3, kg: 30, reps: 8 },
+      { name: 'ラットプルダウン', sets: 3, kg: 30, reps: 10 },
+      { name: 'ショルダープレス', sets: 3, kg: 15, reps: 10 },
+      { name: 'レッグカール', sets: 3, kg: 20, reps: 12 },
     ],
   },
   B: {
     name: '全身法 B',
     exercises: [
-      { name: 'デッドリフト', sets: 3, reps: 6 },
-      { name: 'インクラインダンベルプレス', sets: 3, reps: 10 },
-      { name: 'シーテッドロー', sets: 3, reps: 10 },
-      { name: 'サイドレイズ', sets: 3, reps: 15 },
-      { name: 'レッグエクステンション', sets: 3, reps: 12 },
+      { name: 'デッドリフト', sets: 3, kg: 50, reps: 6 },
+      { name: 'インクラインダンベルプレス', sets: 3, kg: 12, reps: 10 },
+      { name: 'シーテッドロー', sets: 3, kg: 30, reps: 10 },
+      { name: 'サイドレイズ', sets: 3, kg: 5, reps: 15 },
+      { name: 'レッグエクステンション', sets: 3, kg: 20, reps: 12 },
     ],
   },
 }

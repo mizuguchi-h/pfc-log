@@ -313,7 +313,7 @@ function Workout({ state, log, dateKey, patchLog }) {
   const start = (menuKey) => {
     const exercises = state.menus[menuKey].exercises.map((ex) => {
       const prev = lastSetsFor(state, ex.name, dateKey)
-      const sets = prev || Array.from({ length: ex.sets }, () => ({ kg: '', reps: ex.reps }))
+      const sets = prev || Array.from({ length: ex.sets }, () => ({ kg: ex.kg ?? '', reps: ex.reps }))
       return { name: ex.name, sets }
     })
     patchLog((l) => ({ ...l, workout: { menu: menuKey, exercises } }))
@@ -544,15 +544,20 @@ function Chat({ state, setState, dateKey, openSettings }) {
 function Settings({ state, setState, close }) {
   const [s, setS] = useState(state.settings)
   const [menuText, setMenuText] = useState({
-    A: state.menus.A.exercises.map((e) => `${e.name}, ${e.sets}, ${e.reps}`).join('\n'),
-    B: state.menus.B.exercises.map((e) => `${e.name}, ${e.sets}, ${e.reps}`).join('\n'),
+    A: state.menus.A.exercises.map((e) => `${e.name}, ${e.sets}, ${e.kg ?? 0}, ${e.reps}`).join('\n'),
+    B: state.menus.B.exercises.map((e) => `${e.name}, ${e.sets}, ${e.kg ?? 0}, ${e.reps}`).join('\n'),
   })
   const fileRef = useRef(null)
 
   const parseMenu = (text) =>
     text.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-      const [name, sets, reps] = line.split(',').map((x) => x.trim())
-      return { name, sets: Number(sets) || 3, reps: Number(reps) || 10 }
+      const parts = line.split(',').map((x) => x.trim())
+      if (parts.length >= 4) {
+        const [name, sets, kg, reps] = parts
+        return { name, sets: Number(sets) || 3, kg: Number(kg) || 0, reps: Number(reps) || 10 }
+      }
+      const [name, sets, reps] = parts
+      return { name, sets: Number(sets) || 3, kg: 0, reps: Number(reps) || 10 }
     })
 
   const saveAll = () => {
@@ -611,7 +616,7 @@ function Settings({ state, setState, close }) {
           ))}
         </div>
 
-        <h2>ジムメニュー(1行 = 種目名, セット数, 回数)</h2>
+        <h2>ジムメニュー(1行 = 種目名, セット数, kg, 回数)</h2>
         {['A', 'B'].map((k) => (
           <label key={k} className="field">
             <span className="muted small">メニュー{k}</span>
