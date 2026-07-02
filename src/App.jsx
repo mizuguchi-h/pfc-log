@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SLOTS } from './data'
 import {
   loadState, saveState, todayKey, getLog, macrosOf, totalsOf,
-  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf, dayOfWeekOf,
+  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf, dayOfWeekOf, loggedDaysCount,
 } from './store'
 import { buildContext, askGemini } from './ai'
 
@@ -94,6 +94,7 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
   const trainDay = isTrainingDay(state, dateKey)
   const target = targetsOf(state, dateKey)
   const remaining = target.kcal - totals.kcal
+  const streak = loggedDaysCount(state, 7)
 
   return (
     <div className="page">
@@ -104,6 +105,8 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
         </div>
         <button className="ghost" onClick={openSettings}>⚙︎ 設定</button>
       </header>
+
+      <div className="streak-chip">🔥 直近7日 {streak}/7日記録</div>
 
       <section className="card hero">
         <div className="kcal-big">
@@ -408,6 +411,12 @@ const repsDefault = (reps) => {
   return Number.isNaN(n) ? 10 : n
 }
 
+// 目標reps表記から上限の回数を取り出す(例: "8〜10" → 10, "12" → 12)
+const repsRangeMax = (reps) => {
+  const nums = String(reps).match(/\d+/g)?.map(Number) || []
+  return nums.length ? Math.max(...nums) : null
+}
+
 function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
   const scheduled = state.schedule[dayOfWeekOf(dateKey)] || null
   const isToday = dateKey === todayKey()
@@ -423,8 +432,15 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
         }
       }
       const prev = lastSetsFor(state, ex.name, dateKey)
-      const sets = prev || Array.from({ length: ex.sets }, () => ({ kg: ex.kg ?? '', reps: repsDefault(ex.reps) }))
-      return { name: ex.name, repsTarget: ex.reps, sets }
+      const maxReps = repsRangeMax(ex.reps)
+      // 前回、目標回数の上限を全セットで達成していたら重量アップを提案(+2.5kg)
+      const suggestBump = !!prev && maxReps != null
+        && prev.every((s) => Number(s.reps) >= maxReps)
+        && prev.some((s) => Number(s.kg) > 0)
+      const sets = prev
+        ? prev.map((s) => ({ ...s, kg: s.kg === '' ? s.kg : Number(s.kg) + (suggestBump ? 2.5 : 0) }))
+        : Array.from({ length: ex.sets }, () => ({ kg: ex.kg ?? '', reps: repsDefault(ex.reps) }))
+      return { name: ex.name, repsTarget: ex.reps, sets, suggestBump }
     })
     patchLog((l) => ({ ...l, workout: { menu: menuKey, exercises } }))
   }
@@ -523,6 +539,7 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
             </>
           ) : (
             <>
+              {ex.suggestBump && <p className="suggest">💪 前回、目標回数を達成 → 重量を+2.5kgに調整しました</p>}
               {ex.repsTarget && <p className="muted small">目標 {ex.repsTarget}回</p>}
               <div className="sethead"><span>#</span><span>kg</span><span>回数</span></div>
               {ex.sets.map((st, j) => (
@@ -562,7 +579,7 @@ function History({ state, patchDate, onEditMeals, onEditWorkout }) {
 
       {weights.length >= 2 && (
         <section className="card">
-          <h2>体重(30日)</h2>
+          <h2>体重(30日・太線は7日移動平均)</h2>
           <WeightChart points={weights} />
         </section>
       )}
@@ -610,20 +627,35 @@ function History({ state, patchDate, onEditMeals, onEditWorkout }) {
   )
 }
 
+// 直近window件(不足時はそこまで)の単純移動平均
+function movingAverage(points, window = 7) {
+  return points.map((p, i) => {
+    const slice = points.slice(Math.max(0, i - window + 1), i + 1)
+    return { k: p.k, w: slice.reduce((sum, x) => sum + x.w, 0) / slice.length }
+  })
+}
+
 function WeightChart({ points }) {
   const W = 320, H = 120, pad = 8
+  const avgPoints = movingAverage(points, 7)
   const ws = points.map((p) => p.w)
   const min = Math.min(...ws) - 0.5
   const max = Math.max(...ws) + 0.5
   const x = (i) => pad + (i / (points.length - 1)) * (W - pad * 2)
   const y = (w) => H - pad - ((w - min) / (max - min)) * (H - pad * 2)
-  const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.w).toFixed(1)}`).join(' ')
+  const avgPath = avgPoints.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.w).toFixed(1)}`).join(' ')
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="体重の推移">
-      <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" />
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="体重の推移(点は実測値、線は7日移動平均)">
+      <defs>
+        <linearGradient id="trendLine" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" style={{ stopColor: 'var(--accent-2)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--accent)' }} />
+        </linearGradient>
+      </defs>
       {points.map((p, i) => (
-        <circle key={i} cx={x(i)} cy={y(p.w)} r="2.5" fill="var(--accent)" />
+        <circle key={i} cx={x(i)} cy={y(p.w)} r="2" fill="var(--muted)" opacity="0.55" />
       ))}
+      <path d={avgPath} fill="none" stroke="url(#trendLine)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       <text x={pad} y={12} className="chart-label">{max.toFixed(1)}kg</text>
       <text x={pad} y={H - 2} className="chart-label">{min.toFixed(1)}kg</text>
     </svg>

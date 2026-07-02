@@ -55,6 +55,14 @@ export function targetsOf(state, dateKey) {
     : { kcal: s.kcalTargetOff, p: s.pTargetOff, f: s.fTargetOff, c: s.cTargetOff }
 }
 
+// 直近n日のうち、何か記録(食事/体重/トレのいずれか)がある日数
+export function loggedDaysCount(state, n) {
+  return lastDates(n).filter((k) => {
+    const l = state.logs[k]
+    return !!l && (l.meals?.length > 0 || l.weight != null || l.workout != null)
+  }).length
+}
+
 export function saveState(state) {
   try {
     localStorage.setItem(KEY, JSON.stringify(state))
