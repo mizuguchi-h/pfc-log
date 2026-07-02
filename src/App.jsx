@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SLOTS } from './data'
 import {
   loadState, saveState, todayKey, getLog, macrosOf, totalsOf,
-  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf,
+  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf, dayOfWeekOf,
 } from './store'
 import { buildContext, askClaude } from './ai'
 
@@ -12,34 +12,53 @@ export default function App() {
   const [state, setState] = useState(loadState)
   const [tab, setTab] = useState('home')
   const [showSettings, setShowSettings] = useState(false)
+  const [editDate, setEditDate] = useState(null) // 履歴から編集中の日付。nullなら今日
   const dateKey = todayKey()
+  const activeDate = editDate || dateKey
 
   useEffect(() => saveState(state), [state])
 
   // ログ更新ヘルパー
-  const patchLog = (fn) =>
+  const patchDate = (key, fn) =>
     setState((s) => {
-      const log = { meals: [], weight: null, workout: null, ...(s.logs[dateKey] || {}) }
-      return { ...s, logs: { ...s.logs, [dateKey]: fn(log) } }
+      const log = { meals: [], weight: null, workout: null, ...(s.logs[key] || {}) }
+      return { ...s, logs: { ...s.logs, [key]: fn(log) } }
     })
+  const patchToday = (fn) => patchDate(dateKey, fn)
+  const patchActive = (fn) => patchDate(activeDate, fn)
 
   const log = getLog(state, dateKey)
   const totals = totalsOf(log, state.foods)
+  const activeLog = getLog(state, activeDate)
+  const activeTotals = totalsOf(activeLog, state.foods)
+
+  // ボトムタブでの直接移動は常に今日に戻す(食事/トレ間の移動では編集中の日付を維持)
+  const goto = (t) => {
+    if (t !== 'meals' && t !== 'workout') setEditDate(null)
+    setTab(t)
+  }
+  const editHistory = (key, t) => { setEditDate(key); setTab(t) }
+  const exitHistoryEdit = () => { setEditDate(null); setTab('history') }
 
   return (
     <div className="app">
       <main className="main">
         {tab === 'home' && (
           <Home state={state} log={log} totals={totals} dateKey={dateKey}
-            patchLog={patchLog} openSettings={() => setShowSettings(true)} goto={setTab} />
+            patchLog={patchToday} openSettings={() => setShowSettings(true)} goto={goto} />
         )}
         {tab === 'meals' && (
-          <Meals state={state} setState={setState} log={log} totals={totals} patchLog={patchLog} />
+          <Meals state={state} setState={setState} log={activeLog} totals={activeTotals} dateKey={activeDate}
+            patchLog={patchActive} editing={!!editDate} onExitEdit={exitHistoryEdit} />
         )}
         {tab === 'workout' && (
-          <Workout state={state} log={log} dateKey={dateKey} patchLog={patchLog} />
+          <Workout state={state} log={activeLog} dateKey={activeDate} patchLog={patchActive}
+            editing={!!editDate} onExitEdit={exitHistoryEdit} />
         )}
-        {tab === 'history' && <History state={state} />}
+        {tab === 'history' && (
+          <History state={state} patchDate={patchDate}
+            onEditMeals={(k) => editHistory(k, 'meals')} onEditWorkout={(k) => editHistory(k, 'workout')} />
+        )}
         {tab === 'chat' && (
           <Chat state={state} setState={setState} dateKey={dateKey} openSettings={() => setShowSettings(true)} />
         )}
@@ -53,7 +72,7 @@ export default function App() {
           ['history', '履歴', '📈'],
           ['chat', '相談', '💬'],
         ].map(([k, label, icon]) => (
-          <button key={k} className={tab === k ? 'tab active' : 'tab'} onClick={() => setTab(k)}>
+          <button key={k} className={tab === k ? 'tab active' : 'tab'} onClick={() => goto(k)}>
             <span className="tab-icon">{icon}</span>
             <span>{label}</span>
           </button>
@@ -159,7 +178,7 @@ function Bar({ label, val, target, cls }) {
 
 /* ================= 食事 ================= */
 
-function Meals({ state, setState, log, totals, patchLog }) {
+function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExitEdit }) {
   const [slot, setSlot] = useState('breakfast')
   const [showCustom, setShowCustom] = useState(false)
   const [custom, setCustom] = useState({ name: '', kcal: '', p: '', f: '', c: '' })
@@ -220,6 +239,13 @@ function Meals({ state, setState, log, totals, patchLog }) {
         <h1>食事記録</h1>
         <div className="muted">合計 {Math.round(totals.kcal)} kcal</div>
       </header>
+
+      {editing && (
+        <div className="editbar row between">
+          <span className="muted small">編集中: {dateKey}</span>
+          <button className="ghost" onClick={onExitEdit}>履歴に戻る</button>
+        </div>
+      )}
 
       <div className="seg">
         {SLOTS.map((sl) => (
@@ -320,9 +346,10 @@ const repsDefault = (reps) => {
   return Number.isNaN(n) ? 10 : n
 }
 
-function Workout({ state, log, dateKey, patchLog }) {
-  const d = new Date()
-  const scheduled = state.schedule[d.getDay()] || null
+function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
+  const scheduled = state.schedule[dayOfWeekOf(dateKey)] || null
+  const isToday = dateKey === todayKey()
+  const dayLabel = isToday ? '今日' : dateKey
 
   const start = (menuKey) => {
     const exercises = state.menus[menuKey].exercises.map((ex) => {
@@ -370,7 +397,7 @@ function Workout({ state, log, dateKey, patchLog }) {
     })
 
   const clear = () => {
-    if (confirm('今日のトレーニング記録を削除しますか?')) {
+    if (confirm(`${dayLabel}のトレーニング記録を削除しますか?`)) {
       patchLog((l) => ({ ...l, workout: null }))
     }
   }
@@ -379,11 +406,17 @@ function Workout({ state, log, dateKey, patchLog }) {
     return (
       <div className="page">
         <header className="pagehead"><h1>トレーニング</h1></header>
+        {editing && (
+          <div className="editbar row between">
+            <span className="muted small">編集中: {dateKey}</span>
+            <button className="ghost" onClick={onExitEdit}>履歴に戻る</button>
+          </div>
+        )}
         <section className="card">
           <p className="muted">
             {scheduled
-              ? `今日は「メニュー${scheduled}」の日です。`
-              : '今日は予定なし(火A・木B・土A)。手動で始められます。'}
+              ? `${dayLabel}は「メニュー${scheduled}」の日です。`
+              : `${dayLabel}は予定なし(火A・木B・土A)。手動で始められます。`}
           </p>
           <div className="row">
             {['A', 'B'].map((k) => (
@@ -403,6 +436,12 @@ function Workout({ state, log, dateKey, patchLog }) {
         <h1>メニュー{log.workout.menu} <span className={`badge menu-${log.workout.menu}`}>{log.workout.menu}</span></h1>
         <button className="ghost" onClick={clear}>削除</button>
       </header>
+      {editing && (
+        <div className="editbar row between">
+          <span className="muted small">編集中: {dateKey}</span>
+          <button className="ghost" onClick={onExitEdit}>履歴に戻る</button>
+        </div>
+      )}
       {log.workout.exercises.map((ex, i) => (
         <section className="card" key={ex.name}>
           <h2>{ex.name}</h2>
@@ -448,11 +487,12 @@ function Workout({ state, log, dateKey, patchLog }) {
 
 /* ================= 履歴 ================= */
 
-function History({ state }) {
+function History({ state, patchDate, onEditMeals, onEditWorkout }) {
   const days = lastDates(14)
   const weights = lastDates(30).reverse()
     .map((k) => ({ k, w: state.logs[k]?.weight }))
     .filter((x) => x.w != null)
+  const [openDay, setOpenDay] = useState(null)
 
   return (
     <div className="page">
@@ -466,23 +506,40 @@ function History({ state }) {
       )}
 
       <section className="card">
-        <h2>直近14日</h2>
+        <h2>直近14日(タップで編集)</h2>
         {days.map((k) => {
           const l = state.logs[k]
-          if (!l) return (
-            <div className="histrow" key={k}>
-              <span className="muted">{k.slice(5)}</span><span className="muted">記録なし</span>
-            </div>
-          )
-          const t = totalsOf(l, state.foods)
-          const over = t.kcal > targetsOf(state, k).kcal
+          const t = l ? totalsOf(l, state.foods) : null
+          const over = t && t.kcal > targetsOf(state, k).kcal
           return (
-            <div className="histrow" key={k}>
-              <span className="muted">{k.slice(5)}</span>
-              <span className={over ? 'over' : ''}>{Math.round(t.kcal)}kcal</span>
-              <span className="muted small">P{Math.round(t.p)}/F{Math.round(t.f)}/C{Math.round(t.c)}</span>
-              <span>{l.workout ? `🏋️${l.workout.menu}` : ''}</span>
-              <span className="muted small">{l.weight ? `${l.weight}kg` : ''}</span>
+            <div className="histrow-wrap" key={k}>
+              <div className="histrow" onClick={() => setOpenDay(openDay === k ? null : k)}>
+                <span className="muted">{k.slice(5)}</span>
+                {l ? (
+                  <>
+                    <span className={over ? 'over' : ''}>{Math.round(t.kcal)}kcal</span>
+                    <span className="muted small">P{Math.round(t.p)}/F{Math.round(t.f)}/C{Math.round(t.c)}</span>
+                    <span>{l.workout ? `🏋️${l.workout.menu}` : ''}</span>
+                    <span className="muted small">{l.weight ? `${l.weight}kg` : ''}</span>
+                  </>
+                ) : (
+                  <span className="muted">記録なし</span>
+                )}
+              </div>
+              {openDay === k && (
+                <div className="dayedit">
+                  <div className="row">
+                    <input type="number" inputMode="decimal" step="0.1" placeholder="体重kg"
+                      value={l?.weight ?? ''}
+                      onChange={(e) => patchDate(k, (log) => ({ ...log, weight: e.target.value === '' ? null : Number(e.target.value) }))} />
+                    <span className="muted">kg</span>
+                  </div>
+                  <div className="row">
+                    <button className="ghost wide" onClick={() => onEditMeals(k)}>食事を編集</button>
+                    <button className="ghost wide" onClick={() => onEditWorkout(k)}>トレを編集</button>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
