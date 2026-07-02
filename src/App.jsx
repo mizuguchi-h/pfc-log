@@ -752,7 +752,7 @@ function Settings({ state, setState, close }) {
         ))}
 
         <h2>AI相談(Google Gemini APIキー)</h2>
-        <input type="password" placeholder="AIza..." value={s.apiKey}
+        <input type="password" placeholder="AQ.Ab... または AIza..." value={s.apiKey}
           onChange={(e) => setS({ ...s, apiKey: e.target.value })} />
         <p className="muted small">
           <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>
