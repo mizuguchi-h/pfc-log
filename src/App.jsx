@@ -577,12 +577,16 @@ function History({ state, patchDate, onEditMeals, onEditWorkout }) {
     <div className="page">
       <header className="pagehead"><h1>履歴</h1></header>
 
-      {weights.length >= 2 && (
-        <section className="card">
-          <h2>体重(30日・太線は7日移動平均)</h2>
+      <section className="card">
+        <h2>体重(30日・太線は7日移動平均)</h2>
+        {weights.length >= 2 ? (
           <WeightChart points={weights} />
-        </section>
-      )}
+        ) : (
+          <p className="muted small">
+            体重を2日分以上記録するとグラフが表示されます(現在{weights.length}日分)。ホームの「体重」欄や、下の日付をタップして記録できます。
+          </p>
+        )}
+      </section>
 
       <section className="card">
         <h2>直近14日(タップで編集)</h2>
