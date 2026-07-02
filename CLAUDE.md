@@ -14,7 +14,7 @@
 - 状態管理: useStateのみ。全データをlocalStorageのキー `pfclog.v1` に保存(サーバーなし・端末ローカルのみ)
 - スタイル: 素のCSS(`src/index.css`)。CSSフレームワーク不使用
 - PWA: 手書きの `public/sw.js`(同一オリジンGETのstale-while-revalidate)+ `manifest.webmanifest`
-- AI相談: ブラウザから直接 Anthropic Messages API を呼ぶ(`anthropic-dangerous-direct-browser-access` ヘッダ使用、モデル `claude-sonnet-4-6`)。APIキーはユーザーが設定画面で入力しlocalStorageに保存
+- AI相談: ブラウザから直接 Google Gemini API(`generativelanguage.googleapis.com` の generateContent)を呼ぶ、モデル `gemini-2.5-flash`(無料枠あり。課金なしで使えることを優先して選定)。APIキーはGoogle AI Studioで発行し、ユーザーが設定画面で入力しlocalStorageに保存
 
 ## ファイル構成
 
@@ -65,7 +65,8 @@ src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出
 
 ## 現在の状態と直近の作業
 
-- 初回コミット(16ファイル)、kg対応、固定ルーティン反映(全身法A/B・固定献立・トレ日/オフ日別目標)に続き、履歴タブから過去日の食事・トレ・体重を編集できるようにした
+- 初回コミット(16ファイル)、kg対応、固定ルーティン反映(全身法A/B・固定献立・トレ日/オフ日別目標)、履歴の過去日編集、に続き、AI相談をAnthropic(有料)からGoogle Gemini(無料枠あり)に切り替えた(src/ai.js, src/App.jsx)
+- 既存端末に保存済みのAPIキーはAnthropicのものなのでGeminiでは使えない。オーナーは設定画面でGoogle AI Studioのキーに入れ替える必要がある
 - 既存端末の実データでは、foods/mealSetsの新規デフォルトは自動マージされるが、menus(A/Bの種目構成)は自動反映されない。設定画面のジムメニュー欄に新しいテキストを貼り直してもらう必要がある
 
 ## オーナーの環境

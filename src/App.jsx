@@ -4,7 +4,7 @@ import {
   loadState, saveState, todayKey, getLog, macrosOf, totalsOf,
   lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf, dayOfWeekOf,
 } from './store'
-import { buildContext, askClaude } from './ai'
+import { buildContext, askGemini } from './ai'
 
 const DOW = ['日', '月', '火', '水', '木', '金', '土']
 
@@ -582,7 +582,7 @@ function Chat({ state, setState, dateKey, openSettings }) {
     const text = input.trim()
     if (!text || busy) return
     if (!state.settings.apiKey) {
-      setError('先に設定画面でAnthropic APIキーを登録してください。')
+      setError('先に設定画面でGoogle Gemini APIキーを登録してください。')
       return
     }
     setError('')
@@ -592,7 +592,7 @@ function Chat({ state, setState, dateKey, openSettings }) {
     setBusy(true)
     try {
       const system = buildContext(state, dateKey)
-      const reply = await askClaude(state.settings.apiKey, system, history.slice(-12))
+      const reply = await askGemini(state.settings.apiKey, system, history.slice(-12))
       setState((s) => ({ ...s, chat: [...history, { role: 'assistant', content: reply }] }))
     } catch (e) {
       setError(String(e.message || e))
@@ -751,11 +751,12 @@ function Settings({ state, setState, close }) {
           </label>
         ))}
 
-        <h2>AI相談(Anthropic APIキー)</h2>
-        <input type="password" placeholder="sk-ant-..." value={s.apiKey}
+        <h2>AI相談(Google Gemini APIキー)</h2>
+        <input type="password" placeholder="AIza..." value={s.apiKey}
           onChange={(e) => setS({ ...s, apiKey: e.target.value })} />
         <p className="muted small">
-          キーはこの端末のローカルストレージにのみ保存されます。自分専用の利用上限付きキーの使用を推奨します。
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>
+          で無料取得できます。キーはこの端末のローカルストレージにのみ保存されます。
         </p>
 
         <h2>バックアップ</h2>

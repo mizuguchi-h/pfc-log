@@ -54,29 +54,35 @@ export function buildContext(state, dateKey) {
   ].join('\n')
 }
 
-export async function askClaude(apiKey, systemPrompt, messages) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system: systemPrompt,
-      messages,
-    }),
-  })
+// 無料枠のあるモデル(Google AI Studioで取得したAPIキーで利用可能)
+const GEMINI_MODEL = 'gemini-2.5-flash'
+
+export async function askGemini(apiKey, systemPrompt, messages) {
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: { maxOutputTokens: 1500 },
+      }),
+    }
+  )
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`API error ${res.status}: ${body.slice(0, 300)}`)
+    let message = body.slice(0, 300)
+    try { message = JSON.parse(body).error?.message || message } catch {}
+    throw new Error(`API error ${res.status}: ${message}`)
   }
   const data = await res.json()
-  return data.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
+  const parts = data.candidates?.[0]?.content?.parts || []
+  const text = parts.map((p) => p.text || '').join('\n')
+  if (!text) throw new Error('応答が空でした(セーフティフィルタ等で拒否された可能性があります)')
+  return text
 }

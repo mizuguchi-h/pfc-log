@@ -14,7 +14,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
-  // 同一オリジンのGETのみキャッシュ(Anthropic APIなどはキャッシュしない)
+  // 同一オリジンのGETのみキャッシュ(Gemini APIなど外部APIはキャッシュしない)
   if (e.request.method !== 'GET' || url.origin !== location.origin) return
 
   e.respondWith(
