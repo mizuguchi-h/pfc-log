@@ -181,7 +181,7 @@ function Bar({ label, val, target, cls }) {
 function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExitEdit }) {
   const [slot, setSlot] = useState('breakfast')
   const [showCustom, setShowCustom] = useState(false)
-  const [custom, setCustom] = useState({ name: '', kcal: '', p: '', f: '', c: '' })
+  const [custom, setCustom] = useState({ name: '', kcal: '', p: '', f: '', c: '', unitGrams: '', saveToList: true })
   const [setName, setSetName] = useState('')
   const [gramFood, setGramFood] = useState(null) // { food, grams } グラム数を指定して追加中の食品
 
@@ -206,21 +206,30 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
 
   const addCustom = () => {
     if (!custom.name || custom.kcal === '') return
-    patchLog((l) => ({
-      ...l,
-      meals: [...l.meals, {
-        id: uid(), slot, qty: 1,
-        custom: {
-          name: custom.name,
-          kcal: Number(custom.kcal) || 0,
-          p: Number(custom.p) || 0,
-          f: Number(custom.f) || 0,
-          c: Number(custom.c) || 0,
-        },
-      }],
-    }))
-    setCustom({ name: '', kcal: '', p: '', f: '', c: '' })
+    const macros = {
+      name: custom.name,
+      kcal: Number(custom.kcal) || 0,
+      p: Number(custom.p) || 0,
+      f: Number(custom.f) || 0,
+      c: Number(custom.c) || 0,
+    }
+    const unitGrams = custom.unitGrams === '' ? null : Number(custom.unitGrams) || null
+
+    if (custom.saveToList) {
+      const foodId = uid()
+      setState((s) => ({ ...s, foods: [...s.foods, { id: foodId, ...macros, ...(unitGrams ? { unitGrams } : {}) }] }))
+      patchLog((l) => ({ ...l, meals: [...l.meals, { id: uid(), slot, foodId, qty: 1 }] }))
+    } else {
+      patchLog((l) => ({ ...l, meals: [...l.meals, { id: uid(), slot, qty: 1, custom: macros }] }))
+    }
+    setCustom({ name: '', kcal: '', p: '', f: '', c: '', unitGrams: '', saveToList: true })
     setShowCustom(false)
+  }
+
+  const deleteFood = (id) => {
+    if (confirm('食品リストから削除しますか?過去に記録した分の表示にも影響します。')) {
+      setState((s) => ({ ...s, foods: s.foods.filter((f) => f.id !== id) }))
+    }
   }
 
   const setQty = (id, delta) =>
@@ -324,7 +333,7 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
         <div className="row between">
           <h2>食品リスト</h2>
           <button className="ghost" onClick={() => setShowCustom((v) => !v)}>
-            {showCustom ? '閉じる' : '＋ その他を追加'}
+            {showCustom ? '閉じる' : '＋ 食品を追加'}
           </button>
         </div>
         {showCustom && (
@@ -337,16 +346,26 @@ function Meals({ state, setState, log, totals, patchLog, dateKey, editing, onExi
                   value={custom[k]} onChange={(e) => setCustom({ ...custom, [k]: e.target.value })} />
               ))}
             </div>
+            <input type="number" inputMode="decimal" placeholder="グラム数(gで量が変わる食品のみ、任意)"
+              value={custom.unitGrams} onChange={(e) => setCustom({ ...custom, unitGrams: e.target.value })} />
+            <label className="row">
+              <input type="checkbox" checked={custom.saveToList}
+                onChange={(e) => setCustom({ ...custom, saveToList: e.target.checked })} />
+              <span className="muted small">食品リストに保存する(次回からタップで使える)</span>
+            </label>
             <button className="primary wide" onClick={addCustom}>この内容で追加</button>
             <p className="muted small">PFCが不明なら「相談」タブでAIに推定してもらえます。</p>
           </div>
         )}
         <div className="foodgrid">
           {state.foods.map((f) => (
-            <button key={f.id} className="food" onClick={() => tapFood(f)}>
-              <span>{f.name}</span>
-              <span className="muted small">{f.kcal}kcal{f.unitGrams ? `/${f.unitGrams}g` : ''}</span>
-            </button>
+            <div className="foodcell" key={f.id}>
+              <button className="food" onClick={() => tapFood(f)}>
+                <span>{f.name}</span>
+                <span className="muted small">{f.kcal}kcal</span>
+              </button>
+              <button className="food-del" onClick={() => deleteFood(f.id)}>✕</button>
+            </div>
           ))}
         </div>
       </section>
