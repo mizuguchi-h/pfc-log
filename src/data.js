@@ -17,41 +17,93 @@ export const DEFAULT_FOODS = [
   { id: 'f14', name: 'バナナ 1本', kcal: 93, p: 1.1, f: 0.2, c: 22.5 },
   { id: 'f15', name: '無脂肪ヨーグルト 100g', kcal: 56, p: 4.0, f: 0.3, c: 9.6 },
   { id: 'f16', name: 'ゆで卵 1個', kcal: 76, p: 6.5, f: 5.0, c: 0.2 },
+  { id: 'f17', name: 'さつまいも 160g', kcal: 211, p: 1.9, f: 0.3, c: 51.0 },
+  { id: 'f18', name: '鶏むね肉(皮なし)220g', kcal: 231, p: 51.3, f: 4.2, c: 0.2 },
+  { id: 'f19', name: '無水カレー(鶏むねひき肉)250g', kcal: 380, p: 28.0, f: 12.0, c: 35.0 },
+  { id: 'f20', name: '茎ブロッコリー 80g', kcal: 24, p: 3.0, f: 0.2, c: 3.8 },
+  { id: 'f21', name: 'ズッキーニ 100g', kcal: 14, p: 1.3, f: 0.1, c: 2.8 },
+  { id: 'f22', name: 'キムチ 30g', kcal: 9, p: 0.6, f: 0.1, c: 1.4 },
+  { id: 'f23', name: 'ご飯 160g', kcal: 250, p: 4.1, f: 0.5, c: 57.0 },
+  { id: 'f24', name: 'ご飯 120g', kcal: 187, p: 3.0, f: 0.4, c: 42.7 },
 ]
 
+// 種目は sets/kg/reps(通常種目) か type:'cardio' + incline/speed/minutes(有酸素) のいずれか
 export const DEFAULT_MENUS = {
   A: {
-    name: '全身法 A',
+    name: '全身法A(ベンチ重視)',
     exercises: [
-      { name: 'スクワット', sets: 3, kg: 40, reps: 8 },
-      { name: 'ベンチプレス', sets: 3, kg: 30, reps: 8 },
-      { name: 'ラットプルダウン', sets: 3, kg: 30, reps: 10 },
-      { name: 'ショルダープレス', sets: 3, kg: 15, reps: 10 },
-      { name: 'レッグカール', sets: 3, kg: 20, reps: 12 },
+      { name: 'ベンチプレス', sets: 4, kg: 30, reps: '8〜10' },
+      { name: 'ラットプルダウン', sets: 4, kg: 30, reps: '10〜12' },
+      { name: 'レッグプレス', sets: 4, kg: 60, reps: '10〜12' },
+      { name: 'ショルダープレス', sets: 3, kg: 15, reps: '10〜12' },
+      { name: 'トライセプスエクステンション', sets: 3, kg: 15, reps: '12〜15' },
+      { name: 'レッグレイズ', sets: 3, kg: 0, reps: '12〜15' },
+      { name: 'ウォーキング', type: 'cardio', incline: 12, speed: '4.5〜5', minutes: 20 },
     ],
   },
   B: {
-    name: '全身法 B',
+    name: '全身法B(バランス重視)',
     exercises: [
-      { name: 'デッドリフト', sets: 3, kg: 50, reps: 6 },
-      { name: 'インクラインダンベルプレス', sets: 3, kg: 12, reps: 10 },
-      { name: 'シーテッドロー', sets: 3, kg: 30, reps: 10 },
-      { name: 'サイドレイズ', sets: 3, kg: 5, reps: 15 },
-      { name: 'レッグエクステンション', sets: 3, kg: 20, reps: 12 },
+      { name: 'チェストプレス', sets: 4, kg: 30, reps: '8〜12' },
+      { name: 'ローイング', sets: 4, kg: 30, reps: '10〜12' },
+      { name: 'レッグエクステンション', sets: 4, kg: 20, reps: '10〜12' },
+      { name: 'レッグカール', sets: 4, kg: 20, reps: '10〜12' },
+      { name: 'サイドレイズ', sets: 4, kg: 5, reps: '10〜12' },
+      { name: 'アブドミナル', sets: 3, kg: 20, reps: '10〜12' },
+      { name: 'レッグレイズ', sets: 3, kg: 0, reps: '12' },
+      { name: 'ウォーキング', type: 'cardio', incline: 12, speed: '4.5〜5', minutes: 20 },
     ],
   },
 }
 
-// 曜日 → メニュー (0=日, 1=月, 2=火, ...)
+// 曜日 → メニュー (0=日, 1=月, 2=火, ...)。それ以外はオフ日
 export const DEFAULT_SCHEDULE = { 2: 'A', 4: 'B', 6: 'A' }
 
 export const DEFAULT_SETTINGS = {
-  kcalTarget: 1800,
-  pTarget: 130,
-  fTarget: 50,
-  cTarget: 200,
+  kcalTargetTrain: 1900,
+  pTargetTrain: 140,
+  fTargetTrain: 40,
+  cTargetTrain: 210,
+  kcalTargetOff: 1750,
+  pTargetOff: 140,
+  fTargetOff: 40,
+  cTargetOff: 165,
   apiKey: '',
 }
+
+// 固定献立(食事タブの「ワンタップ追加」に初期表示)
+export const DEFAULT_MEAL_SETS = [
+  { id: 'ms-train-am', name: 'トレ日: 朝', slot: 'breakfast', items: [
+    { foodId: 'f11', qty: 1 }, { foodId: 'f06', qty: 2 }, { foodId: 'f17', qty: 1 },
+  ] },
+  { id: 'ms-train-lunch-curry', name: 'トレ日: 昼(カレー)', slot: 'lunch', items: [
+    { foodId: 'f19', qty: 1 }, { foodId: 'f01', qty: 1 },
+  ] },
+  { id: 'ms-train-lunch-chicken', name: 'トレ日: 昼(鶏むね)', slot: 'lunch', items: [
+    { foodId: 'f18', qty: 1 }, { foodId: 'f23', qty: 1 }, { foodId: 'f20', qty: 1 },
+  ] },
+  { id: 'ms-train-snack', name: 'トレ日: 間食(ジム前)', slot: 'snack', items: [
+    { foodId: 'f14', qty: 1 },
+  ] },
+  { id: 'ms-train-dinner', name: 'トレ日: 夜', slot: 'dinner', items: [
+    { foodId: 'f09', qty: 1 }, { foodId: 'f23', qty: 1 }, { foodId: 'f21', qty: 1 }, { foodId: 'f11', qty: 1 },
+  ] },
+  { id: 'ms-off-am-natto', name: 'オフ日: 朝(納豆)', slot: 'breakfast', items: [
+    { foodId: 'f11', qty: 1 }, { foodId: 'f17', qty: 1 }, { foodId: 'f07', qty: 1 }, { foodId: 'f22', qty: 1 },
+  ] },
+  { id: 'ms-off-am-egg', name: 'オフ日: 朝(卵)', slot: 'breakfast', items: [
+    { foodId: 'f06', qty: 2 },
+  ] },
+  { id: 'ms-off-lunch-chicken', name: 'オフ日: 昼(鶏むね)', slot: 'lunch', items: [
+    { foodId: 'f18', qty: 1 }, { foodId: 'f23', qty: 1 }, { foodId: 'f20', qty: 1 },
+  ] },
+  { id: 'ms-off-lunch-curry', name: 'オフ日: 昼(カレー)', slot: 'lunch', items: [
+    { foodId: 'f19', qty: 1 }, { foodId: 'f01', qty: 1 },
+  ] },
+  { id: 'ms-off-dinner', name: 'オフ日: 夜', slot: 'dinner', items: [
+    { foodId: 'f09', qty: 1 }, { foodId: 'f24', qty: 1 }, { foodId: 'f21', qty: 1 },
+  ] },
+]
 
 export const SLOTS = [
   { key: 'breakfast', label: '朝' },

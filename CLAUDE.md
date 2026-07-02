@@ -23,7 +23,7 @@ index.html              PWAメタタグ、SW登録(https時のみ)
 public/                 manifest, sw.js, アイコン(PIL生成の黄色バーベル)
 src/main.jsx            エントリ
 src/App.jsx             全UI(ホーム/食事/トレ/履歴/AI相談/設定モーダル、下部5タブ)
-src/data.js             初期データ(食品マスタ16品、メニューA/B、スケジュール、目標)
+src/data.js             初期データ(食品マスタ、メニューA/B、スケジュール、トレ日/オフ日別目標、固定献立セット)
 src/store.js            localStorage入出力、マクロ計算、前回セット検索、エクスポート
 src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出し
 ```
@@ -32,36 +32,40 @@ src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出
 
 ```
 {
-  settings: { kcalTarget, pTarget, fTarget, cTarget, apiKey },
+  settings: { kcalTargetTrain, pTargetTrain, fTargetTrain, cTargetTrain,
+              kcalTargetOff, pTargetOff, fTargetOff, cTargetOff, apiKey },
   foods:    [{ id, name, kcal, p, f, c }],            // 1単位あたり
-  menus:    { A: { name, exercises: [{ name, sets, kg, reps }] }, B: {...} },
-  schedule: { 2: 'A', 4: 'B', 6: 'A' },               // 曜日(0=日)→メニュー。火A木B土A
+  menus:    { A: { name, exercises: [Exercise] }, B: {...} },
+  schedule: { 2: 'A', 4: 'B', 6: 'A' },               // 曜日(0=日)→メニュー。それ以外はオフ日
   logs:     { 'YYYY-MM-DD': {
                 meals: [{ id, slot, qty, foodId? | custom?{name,kcal,p,f,c} }],
                 weight: number|null,
-                workout: { menu:'A'|'B', exercises:[{ name, sets:[{kg,reps}] }] } | null } },
+                workout: { menu:'A'|'B', exercises:[LoggedExercise] } | null } },
   mealSets: [{ id, name, slot, items }],              // ワンタップ献立セット
   chat:     [{ role, content }]
 }
 ```
 
+- Exercise は通常種目 `{ name, sets, kg, reps }`(reps は "8〜10" のような範囲文字列)、または有酸素 `{ name, type:'cardio', incline, speed, minutes }` のいずれか
+- LoggedExercise は通常種目 `{ name, repsTarget, sets:[{kg,reps}] }`、または有酸素 `{ name, type:'cardio', incline, speed, targetMinutes, minutes, done }`
 - slot は breakfast / lunch / snack / dinner
-- `loadState()` がデフォルト値とマージするので、localStorageに古い形式が残っていても起動は壊れない設計を維持すること
+- トレーニング日/オフ日の判定は `isTrainingDay(state, dateKey)`(schedule に当日のメニューがあるか)。目標値もこれで切り替える(`targetsOf()`)
+- `loadState()` がデフォルト値とマージするので、localStorageに古い形式が残っていても起動は壊れない設計を維持すること。foods/mealSets はidベースで「保存済み+未追加のデフォルトを補う」マージ(`mergeById`)なので、コード側で追加した既定食品・献立セットは既存端末にも自動で反映される。menus はこの仕組みが無く `saved.menus || DEFAULT_MENUS` で丸ごと決まるので、内容を変えたら既存端末では設定画面のテキストエリアに書き直してもらう必要がある
 
 ## 仕様上の決めごと
 
-- ジムメニュー設定は設定画面のテキストエリアで「1行 = 種目名, セット数, kg, 回数」。旧3項目形式(種目名, セット数, 回数)もパース可(後方互換を壊さない)
-- トレ記録開始時、各種目のkgは「過去ログの同名種目の前回セット > メニュー定義のkg」の優先順で自動プリフィル
-- AI相談は毎回 `buildContext()` で目標・当日の全記録・直近7日サマリーをsystemプロンプトに注入する(ユーザーが状況説明しなくていいのがこのアプリの核)
+- ジムメニュー設定は設定画面のテキストエリアで「1行 = 種目名, セット数, kg, 回数」。旧3項目形式(種目名, セット数, 回数)もパース可(後方互換を壊さない)。有酸素は「種目名, cardio, 傾斜, 速度, 分」
+- トレ記録開始時、各種目のkgは「過去ログの同名種目の前回セット > メニュー定義のkg」の優先順で自動プリフィル。reps はメニュー定義の範囲文字列の先頭の数値をプリフィルに使う(`repsDefault()`)
+- 1日の目標(kcal/P/F/C)はトレーニング日とオフ日で別々に持つ。ホーム画面は当日がどちらかを自動判定して該当する目標を表示する
+- AI相談は毎回 `buildContext()` で目標(当日該当分)・当日の全記録・直近7日サマリーをsystemプロンプトに注入する(ユーザーが状況説明しなくていいのがこのアプリの核)
 - データは端末ローカルのみなので、設定画面のJSONエクスポート/インポート(バックアップ)機能は削らない
 - UIは日本語、モバイルファースト(max-width 560px、下部タブ、safe-area対応)
 - デザイントークン: ダーク基調 bg #14181d / アクセント #ffc53d / P #38d9a9 / F #ffa94d / C #74a8fc(index.cssの:root参照)
 
 ## 現在の状態と直近の作業
 
-- 初回コミット(16ファイル)はpush済み、Vercelデプロイ済み、動作確認済み
-- 直近の変更: メニュー定義へのkg追加(src/App.jsx, src/data.js)。チャットからダウンロードしたファイルの上書きで適用予定だったため、**リポジトリに反映済みかは最初に確認すること**(設定画面のラベルが「種目名, セット数, kg, 回数」になっていれば適用済み)
-- 既存ユーザーデータのmenusにはkgが無い場合がある(設定画面で4項目形式に書き直せば入る)
+- 初回コミット(16ファイル)、kg対応、に続き、オーナーがChatGPTと詰めていた固定ルーティン(全身法A/B・固定献立・トレ日/オフ日別目標)をアプリのデフォルト値として反映済み(src/data.js, src/store.js, src/App.jsx, src/ai.js)
+- 既存端末の実データでは、foods/mealSetsの新規デフォルトは自動マージされるが、menus(A/Bの種目構成)は自動反映されない。設定画面のジムメニュー欄に新しいテキストを貼り直してもらう必要がある
 
 ## オーナーの環境
 

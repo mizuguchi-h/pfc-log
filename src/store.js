@@ -1,4 +1,4 @@
-import { DEFAULT_FOODS, DEFAULT_MENUS, DEFAULT_SCHEDULE, DEFAULT_SETTINGS } from './data'
+import { DEFAULT_FOODS, DEFAULT_MEAL_SETS, DEFAULT_MENUS, DEFAULT_SCHEDULE, DEFAULT_SETTINGS } from './data'
 
 const KEY = 'pfclog.v1'
 
@@ -11,6 +11,14 @@ export const todayKey = (d = new Date()) => {
   return `${y}-${m}-${dd}`
 }
 
+// 保存済みリストに、まだ無いデフォルト項目だけをidで補って追加する
+// (コード側で追加した食品/献立セットが、既存端末のデータにも反映されるように)
+function mergeById(defaults, saved) {
+  const list = saved || []
+  const ids = new Set(list.map((x) => x.id))
+  return [...list, ...defaults.filter((d) => !ids.has(d.id))]
+}
+
 export function loadState() {
   let saved = {}
   try {
@@ -18,13 +26,30 @@ export function loadState() {
   } catch {}
   return {
     settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) },
-    foods: saved.foods?.length ? saved.foods : DEFAULT_FOODS,
+    foods: mergeById(DEFAULT_FOODS, saved.foods),
     menus: saved.menus || DEFAULT_MENUS,
     schedule: saved.schedule || DEFAULT_SCHEDULE,
     logs: saved.logs || {}, // { 'YYYY-MM-DD': { meals: [], weight, workout } }
-    mealSets: saved.mealSets || [], // [{ id, name, slot, items: [{foodId?, custom?, qty}] }]
+    mealSets: mergeById(DEFAULT_MEAL_SETS, saved.mealSets), // [{ id, name, slot, items: [{foodId?, custom?, qty}] }]
     chat: saved.chat || [], // [{ role, content }]
   }
+}
+
+// dateKeyの曜日 (0=日, 1=月, ...)
+export function dayOfWeekOf(dateKey) {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay()
+}
+
+export function isTrainingDay(state, dateKey) {
+  return !!state.schedule[dayOfWeekOf(dateKey)]
+}
+
+export function targetsOf(state, dateKey) {
+  const s = state.settings
+  return isTrainingDay(state, dateKey)
+    ? { kcal: s.kcalTargetTrain, p: s.pTargetTrain, f: s.fTargetTrain, c: s.cTargetTrain }
+    : { kcal: s.kcalTargetOff, p: s.pTargetOff, f: s.fTargetOff, c: s.cTargetOff }
 }
 
 export function saveState(state) {

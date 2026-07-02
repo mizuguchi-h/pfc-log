@@ -91,6 +91,7 @@ input:focus-visible, textarea:focus-visible, button:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
 input[type='number'] { font-variant-numeric: tabular-nums; }
+input[type='checkbox'] { width: auto; }
 
 /* ---- 食事 ---- */
 .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }

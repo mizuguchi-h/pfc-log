@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SLOTS } from './data'
 import {
   loadState, saveState, todayKey, getLog, macrosOf, totalsOf,
-  lastDates, lastSetsFor, uid, exportJSON,
+  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf,
 } from './store'
 import { buildContext, askClaude } from './ai'
 
@@ -70,16 +70,17 @@ export default function App() {
 /* ================= ホーム ================= */
 
 function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
-  const s = state.settings
   const d = new Date()
   const menuKey = state.schedule[d.getDay()] || null
-  const remaining = s.kcalTarget - totals.kcal
+  const trainDay = isTrainingDay(state, dateKey)
+  const target = targetsOf(state, dateKey)
+  const remaining = target.kcal - totals.kcal
 
   return (
     <div className="page">
       <header className="pagehead">
         <div>
-          <div className="date">{dateKey}({DOW[d.getDay()]})</div>
+          <div className="date">{dateKey}({DOW[d.getDay()]}) ・ {trainDay ? 'トレ日' : 'オフ日'}</div>
           <h1>今日の残り</h1>
         </div>
         <button className="ghost" onClick={openSettings}>⚙︎ 設定</button>
@@ -91,12 +92,12 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
           <small>kcal</small>
         </div>
         <div className="kcal-sub">
-          摂取 {Math.round(totals.kcal)} / 目標 {s.kcalTarget} kcal
+          摂取 {Math.round(totals.kcal)} / 目標 {target.kcal} kcal
         </div>
         <div className="pfc-bars">
-          <Bar label="P" val={totals.p} target={s.pTarget} cls="p" />
-          <Bar label="F" val={totals.f} target={s.fTarget} cls="f" />
-          <Bar label="C" val={totals.c} target={s.cTarget} cls="c" />
+          <Bar label="P" val={totals.p} target={target.p} cls="p" />
+          <Bar label="F" val={totals.f} target={target.f} cls="f" />
+          <Bar label="C" val={totals.c} target={target.c} cls="c" />
         </div>
       </section>
 
@@ -109,7 +110,14 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
           <>
             <ul className="plainlist">
               {state.menus[menuKey].exercises.map((ex) => (
-                <li key={ex.name}>{ex.name} <span className="muted">{ex.sets}set × {ex.reps}回</span></li>
+                <li key={ex.name}>
+                  {ex.name}{' '}
+                  <span className="muted">
+                    {ex.type === 'cardio'
+                      ? `傾斜${ex.incline}・速度${ex.speed}・${ex.minutes}分`
+                      : `${ex.sets}set × ${ex.reps}回`}
+                  </span>
+                </li>
               ))}
             </ul>
             <button className="primary wide" onClick={() => goto('workout')}>
@@ -306,15 +314,28 @@ function Meals({ state, setState, log, totals, patchLog }) {
 
 /* ================= トレーニング ================= */
 
+// 目標reps表記("8〜10"等)から、新規セットの初期回数を取り出す
+const repsDefault = (reps) => {
+  const n = parseInt(String(reps), 10)
+  return Number.isNaN(n) ? 10 : n
+}
+
 function Workout({ state, log, dateKey, patchLog }) {
   const d = new Date()
   const scheduled = state.schedule[d.getDay()] || null
 
   const start = (menuKey) => {
     const exercises = state.menus[menuKey].exercises.map((ex) => {
+      if (ex.type === 'cardio') {
+        return {
+          name: ex.name, type: 'cardio',
+          incline: ex.incline, speed: ex.speed, targetMinutes: ex.minutes,
+          minutes: '', done: false,
+        }
+      }
       const prev = lastSetsFor(state, ex.name, dateKey)
-      const sets = prev || Array.from({ length: ex.sets }, () => ({ kg: ex.kg ?? '', reps: ex.reps }))
-      return { name: ex.name, sets }
+      const sets = prev || Array.from({ length: ex.sets }, () => ({ kg: ex.kg ?? '', reps: repsDefault(ex.reps) }))
+      return { name: ex.name, repsTarget: ex.reps, sets }
     })
     patchLog((l) => ({ ...l, workout: { menu: menuKey, exercises } }))
   }
@@ -338,6 +359,13 @@ function Workout({ state, log, dateKey, patchLog }) {
     patchLog((l) => {
       const w = structuredClone(l.workout)
       w.exercises[exIdx].sets.pop()
+      return { ...l, workout: w }
+    })
+
+  const updateCardio = (exIdx, field, value) =>
+    patchLog((l) => {
+      const w = structuredClone(l.workout)
+      w.exercises[exIdx][field] = field === 'minutes' ? (value === '' ? '' : Number(value)) : value
       return { ...l, workout: w }
     })
 
@@ -378,20 +406,39 @@ function Workout({ state, log, dateKey, patchLog }) {
       {log.workout.exercises.map((ex, i) => (
         <section className="card" key={ex.name}>
           <h2>{ex.name}</h2>
-          <div className="sethead"><span>#</span><span>kg</span><span>回数</span></div>
-          {ex.sets.map((st, j) => (
-            <div className="setrow" key={j}>
-              <span className="muted">{j + 1}</span>
-              <input type="number" inputMode="decimal" value={st.kg}
-                onChange={(e) => updateSet(i, j, 'kg', e.target.value)} />
-              <input type="number" inputMode="numeric" value={st.reps}
-                onChange={(e) => updateSet(i, j, 'reps', e.target.value)} />
-            </div>
-          ))}
-          <div className="row">
-            <button className="ghost" onClick={() => addSet(i)}>＋ セット</button>
-            {ex.sets.length > 1 && <button className="ghost" onClick={() => removeSet(i)}>− セット</button>}
-          </div>
+          {ex.type === 'cardio' ? (
+            <>
+              <p className="muted small">傾斜{ex.incline}・速度{ex.speed}・目標{ex.targetMinutes}分</p>
+              <div className="row">
+                <input type="number" inputMode="decimal" placeholder="実施分数" value={ex.minutes}
+                  onChange={(e) => updateCardio(i, 'minutes', e.target.value)} />
+                <span className="muted">分</span>
+              </div>
+              <label className="row">
+                <input type="checkbox" checked={ex.done}
+                  onChange={(e) => updateCardio(i, 'done', e.target.checked)} />
+                <span>完了</span>
+              </label>
+            </>
+          ) : (
+            <>
+              {ex.repsTarget && <p className="muted small">目標 {ex.repsTarget}回</p>}
+              <div className="sethead"><span>#</span><span>kg</span><span>回数</span></div>
+              {ex.sets.map((st, j) => (
+                <div className="setrow" key={j}>
+                  <span className="muted">{j + 1}</span>
+                  <input type="number" inputMode="decimal" value={st.kg}
+                    onChange={(e) => updateSet(i, j, 'kg', e.target.value)} />
+                  <input type="number" inputMode="numeric" value={st.reps}
+                    onChange={(e) => updateSet(i, j, 'reps', e.target.value)} />
+                </div>
+              ))}
+              <div className="row">
+                <button className="ghost" onClick={() => addSet(i)}>＋ セット</button>
+                {ex.sets.length > 1 && <button className="ghost" onClick={() => removeSet(i)}>− セット</button>}
+              </div>
+            </>
+          )}
         </section>
       ))}
       <p className="muted small">前回の重量が自動で入ります。記録は入力と同時に保存されます。</p>
@@ -428,7 +475,7 @@ function History({ state }) {
             </div>
           )
           const t = totalsOf(l, state.foods)
-          const over = t.kcal > state.settings.kcalTarget
+          const over = t.kcal > targetsOf(state, k).kcal
           return (
             <div className="histrow" key={k}>
               <span className="muted">{k.slice(5)}</span>
@@ -543,21 +590,28 @@ function Chat({ state, setState, dateKey, openSettings }) {
 
 function Settings({ state, setState, close }) {
   const [s, setS] = useState(state.settings)
+  const exerciseLine = (e) => e.type === 'cardio'
+    ? `${e.name}, cardio, ${e.incline}, ${e.speed}, ${e.minutes}`
+    : `${e.name}, ${e.sets}, ${e.kg ?? 0}, ${e.reps}`
   const [menuText, setMenuText] = useState({
-    A: state.menus.A.exercises.map((e) => `${e.name}, ${e.sets}, ${e.kg ?? 0}, ${e.reps}`).join('\n'),
-    B: state.menus.B.exercises.map((e) => `${e.name}, ${e.sets}, ${e.kg ?? 0}, ${e.reps}`).join('\n'),
+    A: state.menus.A.exercises.map(exerciseLine).join('\n'),
+    B: state.menus.B.exercises.map(exerciseLine).join('\n'),
   })
   const fileRef = useRef(null)
 
   const parseMenu = (text) =>
     text.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
       const parts = line.split(',').map((x) => x.trim())
+      if (parts[1] === 'cardio') {
+        const [name, , incline, speed, minutes] = parts
+        return { name, type: 'cardio', incline: Number(incline) || 0, speed: speed || '', minutes: Number(minutes) || 20 }
+      }
       if (parts.length >= 4) {
         const [name, sets, kg, reps] = parts
-        return { name, sets: Number(sets) || 3, kg: Number(kg) || 0, reps: Number(reps) || 10 }
+        return { name, sets: Number(sets) || 3, kg: Number(kg) || 0, reps: reps || '10' }
       }
       const [name, sets, reps] = parts
-      return { name, sets: Number(sets) || 3, kg: 0, reps: Number(reps) || 10 }
+      return { name, sets: Number(sets) || 3, kg: 0, reps: reps || '10' }
     })
 
   const saveAll = () => {
@@ -565,10 +619,14 @@ function Settings({ state, setState, close }) {
       ...st,
       settings: {
         ...s,
-        kcalTarget: Number(s.kcalTarget) || 1800,
-        pTarget: Number(s.pTarget) || 130,
-        fTarget: Number(s.fTarget) || 50,
-        cTarget: Number(s.cTarget) || 200,
+        kcalTargetTrain: Number(s.kcalTargetTrain) || 1900,
+        pTargetTrain: Number(s.pTargetTrain) || 140,
+        fTargetTrain: Number(s.fTargetTrain) || 40,
+        cTargetTrain: Number(s.cTargetTrain) || 210,
+        kcalTargetOff: Number(s.kcalTargetOff) || 1750,
+        pTargetOff: Number(s.pTargetOff) || 140,
+        fTargetOff: Number(s.fTargetOff) || 40,
+        cTargetOff: Number(s.cTargetOff) || 165,
       },
       menus: {
         A: { ...st.menus.A, exercises: parseMenu(menuText.A) },
@@ -605,9 +663,9 @@ function Settings({ state, setState, close }) {
           <button className="ghost" onClick={close}>閉じる</button>
         </header>
 
-        <h2>1日の目標</h2>
+        <h2>1日の目標(トレーニング日)</h2>
         <div className="grid4">
-          {[['kcalTarget', 'kcal'], ['pTarget', 'P(g)'], ['fTarget', 'F(g)'], ['cTarget', 'C(g)']].map(([k, label]) => (
+          {[['kcalTargetTrain', 'kcal'], ['pTargetTrain', 'P(g)'], ['fTargetTrain', 'F(g)'], ['cTargetTrain', 'C(g)']].map(([k, label]) => (
             <label key={k} className="field">
               <span className="muted small">{label}</span>
               <input type="number" inputMode="numeric" value={s[k]}
@@ -616,7 +674,18 @@ function Settings({ state, setState, close }) {
           ))}
         </div>
 
-        <h2>ジムメニュー(1行 = 種目名, セット数, kg, 回数)</h2>
+        <h2>1日の目標(オフ日)</h2>
+        <div className="grid4">
+          {[['kcalTargetOff', 'kcal'], ['pTargetOff', 'P(g)'], ['fTargetOff', 'F(g)'], ['cTargetOff', 'C(g)']].map(([k, label]) => (
+            <label key={k} className="field">
+              <span className="muted small">{label}</span>
+              <input type="number" inputMode="numeric" value={s[k]}
+                onChange={(e) => setS({ ...s, [k]: e.target.value })} />
+            </label>
+          ))}
+        </div>
+
+        <h2>ジムメニュー(1行 = 種目名, セット数, kg, 回数 / 有酸素は 種目名, cardio, 傾斜, 速度, 分)</h2>
         {['A', 'B'].map((k) => (
           <label key={k} className="field">
             <span className="muted small">メニュー{k}</span>
