@@ -1,4 +1,4 @@
-import { DEFAULT_FOODS, DEFAULT_MEAL_SETS, DEFAULT_MENUS, DEFAULT_SCHEDULE, DEFAULT_SETTINGS } from './data'
+import { DEFAULT_FOODS, DEFAULT_MEAL_SETS, DEFAULT_ROUTINES, DEFAULT_SCHEDULE, DEFAULT_SETTINGS } from './data'
 
 const KEY = 'pfclog.v1'
 
@@ -22,20 +22,35 @@ function mergeById(defaults, saved) {
   return [...merged, ...defaults.filter((d) => !ids.has(d.id))]
 }
 
-export function loadState() {
-  let saved = {}
-  try {
-    saved = JSON.parse(localStorage.getItem(KEY)) || {}
-  } catch {}
+// 旧形式 menus:{A:{...},B:{...}} をルーティン配列に変換する(idはA/Bのまま引き継ぐので
+// scheduleの参照も壊れない)。routinesが無い/menusも無い場合だけデフォルトを使う
+function migrateRoutines(saved) {
+  if (saved.routines) return saved.routines
+  if (saved.menus) {
+    return Object.entries(saved.menus).map(([id, m]) => ({ id, name: m.name, exercises: m.exercises }))
+  }
+  return DEFAULT_ROUTINES
+}
+
+// localStorage/インポートしたバックアップを、常に完全な形のstateに正規化する
+export function normalizeState(saved = {}) {
   return {
     settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) },
     foods: mergeById(DEFAULT_FOODS, saved.foods),
-    menus: saved.menus || DEFAULT_MENUS,
+    routines: migrateRoutines(saved), // [{ id, name, exercises }]
     schedule: saved.schedule || DEFAULT_SCHEDULE,
     logs: saved.logs || {}, // { 'YYYY-MM-DD': { meals: [], weight, workout } }
     mealSets: mergeById(DEFAULT_MEAL_SETS, saved.mealSets), // [{ id, name, slot, items: [{foodId?, custom?, qty}] }]
     chat: saved.chat || [], // [{ role, content }]
   }
+}
+
+export function loadState() {
+  let saved = {}
+  try {
+    saved = JSON.parse(localStorage.getItem(KEY)) || {}
+  } catch {}
+  return normalizeState(saved)
 }
 
 // dateKeyの曜日 (0=日, 1=月, ...)
@@ -53,6 +68,10 @@ export function targetsOf(state, dateKey) {
   return isTrainingDay(state, dateKey)
     ? { kcal: s.kcalTargetTrain, p: s.pTargetTrain, f: s.fTargetTrain, c: s.cTargetTrain }
     : { kcal: s.kcalTargetOff, p: s.pTargetOff, f: s.fTargetOff, c: s.cTargetOff }
+}
+
+export function routineNameOf(state, routineId) {
+  return state.routines.find((r) => r.id === routineId)?.name || routineId
 }
 
 // 直近n日のうち、何か記録(食事/体重/トレのいずれか)がある日数

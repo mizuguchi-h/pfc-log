@@ -23,7 +23,7 @@ index.html              PWAメタタグ、SW登録(https時のみ)
 public/                 manifest, sw.js, アイコン(PIL生成の黄色バーベル)
 src/main.jsx            エントリ
 src/App.jsx             全UI(ホーム/食事/トレ/履歴/AI相談/設定モーダル、下部5タブ)
-src/data.js             初期データ(食品マスタ、メニューA/B、スケジュール、トレ日/オフ日別目標、固定献立セット)
+src/data.js             初期データ(食品マスタ、初期ルーティンA/B、スケジュール、トレ日/オフ日別目標、固定献立セット)
 src/store.js            localStorage入出力、マクロ計算、前回セット検索、エクスポート
 src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出し
 ```
@@ -35,32 +35,32 @@ src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出
   settings: { kcalTargetTrain, pTargetTrain, fTargetTrain, cTargetTrain,
               kcalTargetOff, pTargetOff, fTargetOff, cTargetOff, apiKey },
   foods:    [{ id, name, kcal, p, f, c, unitGrams? }], // kcal/p/f/cはunitGrams(g)あたりの値。個数/パック単位の食品はunitGramsなし
-  menus:    { A: { name, exercises: [Exercise] }, B: {...} },
-  schedule: { 2: 'A', 4: 'B', 6: 'A' },               // 曜日(0=日)→メニュー。それ以外はオフ日
+  routines: [{ id, name, exercises: [Exercise] }],    // 自由に追加・削除できるトレーニングルーティンの一覧
+  schedule: { 2: 'A', 4: 'B', 6: 'A' },               // 曜日(0=日)→routines[].id。それ以外はオフ日
   logs:     { 'YYYY-MM-DD': {
                 meals: [{ id, slot, qty, foodId? | custom?{name,kcal,p,f,c} }],
                 weight: number|null,
-                workout: { menu:'A'|'B', exercises:[LoggedExercise] } | null } },
+                workout: { menu: routineId, exercises:[LoggedExercise] } | null } },
   mealSets: [{ id, name, slot, items }],              // ワンタップ献立セット
   chat:     [{ role, content }]
 }
 ```
 
-- Exercise は通常種目 `{ name, sets, kg, reps }`(reps は "8〜10" のような範囲文字列)、または有酸素 `{ name, type:'cardio', incline, speed, minutes }` のいずれか
-- LoggedExercise は通常種目 `{ name, repsTarget, sets:[{kg,reps}] }`、または有酸素 `{ name, type:'cardio', incline, speed, targetMinutes, minutes, done }`
+- Exercise は3種類: 通常 `{ name, sets, kg, reps }` / 自重(kgなし) `{ name, type:'bodyweight', sets, reps }` / 有酸素 `{ name, type:'cardio', incline, speed, minutes }`。reps は "8〜10" のような範囲文字列
+- LoggedExercise は通常/自重種目 `{ name, type?, repsTarget, sets:[{kg,reps}|{reps}] }`(自重はsetsにkgを含めない)、または有酸素 `{ name, type:'cardio', incline, speed, targetMinutes, minutes, done }`
 - slot は breakfast / lunch / snack / dinner
 - トレーニング日/オフ日の判定は `isTrainingDay(state, dateKey)`(schedule に当日のメニューがあるか)。目標値もこれで切り替える(`targetsOf()`)
-- `loadState()` がデフォルト値とマージするので、localStorageに古い形式が残っていても起動は壊れない設計を維持すること。foods/mealSets はidベースで「保存済み+未追加のデフォルトを補う」マージ(`mergeById`)で、既存項目にもデフォルト側の新フィールドを不足分だけ補う(食品/献立セットは編集UIが無いので上書きしても安全という前提)。コード側で追加・変更した既定食品・献立セットは既存端末にも自動で反映される。menus はこの仕組みが無く `saved.menus || DEFAULT_MENUS` で丸ごと決まるので、内容を変えたら既存端末では設定画面のテキストエリアに書き直してもらう必要がある
+- `loadState()`(内部で`normalizeState()`)がデフォルト値とマージ・移行するので、localStorageに古い形式が残っていても起動は壊れない設計を維持すること。foods/mealSets はidベースで「保存済み+未追加のデフォルトを補う」マージ(`mergeById`)で、既存項目にもデフォルト側の新フィールドを不足分だけ補う(食品/献立セットは編集UIが無いので上書きしても安全という前提)。コード側で追加・変更した既定食品・献立セットは既存端末にも自動で反映される。routinesは旧`menus:{A,B}`形式からの自動移行(`migrateRoutines()`、idはA/Bのまま引き継ぐ)のみで、内容自体のマージはしない。バックアップのインポートも`normalizeState()`を通すので旧形式のJSONを読み込んでも壊れない
 
 ## 仕様上の決めごと
 
-- ジムメニュー設定は設定画面のテキストエリアで「1行 = 種目名, セット数, kg, 回数」。旧3項目形式(種目名, セット数, 回数)もパース可(後方互換を壊さない)。有酸素は「種目名, cardio, 傾斜, 速度, 分」
-- トレ記録開始時、各種目のkgは「過去ログの同名種目の前回セット > メニュー定義のkg」の優先順で自動プリフィル。reps はメニュー定義の範囲文字列の先頭の数値をプリフィルに使う(`repsDefault()`)
+- トレーニングルーティンは固定A/Bではなく自由な数だけ追加・削除できる(トレタブの「ルーティン管理」)。各ルーティンの種目も同じ画面で個別に追加・削除する(重量/自重/有酸素をタブで選んでから入力)。曜日への割り当ては設定画面のセレクトボックスで行う。ルーティン削除時はscheduleの参照も自動で外す
+- トレ記録開始時、各種目のkgは「過去ログの同名種目の前回セット > メニュー定義のkg」の優先順で自動プリフィル。reps はメニュー定義の範囲文字列の先頭の数値をプリフィルに使う(`repsDefault()`)。自重種目はkgを持たず、回数のみ記録する
 - 1日の目標(kcal/P/F/C)はトレーニング日とオフ日で別々に持つ。ホーム画面は当日がどちらかを自動判定して該当する目標を表示する
 - 履歴タブの各日付行はタップで開閉し、体重編集・「食事を編集」「トレを編集」を提供する。後者2つは食事/トレタブをその日付向けに開き(App.jsxの`editDate`state)、上部に「編集中: YYYY-MM-DD」バナーと「履歴に戻る」を表示する。ホーム/下部タブでの直接遷移は常に今日に戻る(食事⇄トレ間の遷移でのみeditDateを維持)
 - 食品リストで`unitGrams`がある食品をタップするとグラム数入力モーダルが開き、入力に応じてkcal/PFCをその場で按分計算してから記録する(qty = 入力g / unitGrams)。無い食品(個数・パック単位)は従来通りタップで即qty=1追加。食品カード上のkcal表示にunitGramsは出さない(グラム数はタップ後に自由入力するので不要)
 - 食品リストは各カードの✕でいつでも削除可能(確認ダイアログあり。過去ログのfoodId参照は現在のfoodsから都度引くため、削除すると過去分の表示も0kcal/`?`になる—既知のトレードオフ)。「＋ 食品を追加」フォームでは名前・kcal/P/F/C・グラム数(任意、gで量が変わる食品向け)を入力し、「食品リストに保存する」を外せばその場限りの記録(従来の一発追加)、付けたままなら食品リストにも永続保存されて次回からタップで使える
-- トレ記録開始時、前回セットが目標reps範囲の上限を全セットで達成していた(かつ前回kg>0)場合、次回セットのkgを自動で+2.5kgして提案バッジを出す(`repsRangeMax()`、Workoutの`start()`内)。過負荷漸進の自動化で、意図的にkgそのものを書き換える(表示だけの提案ではない)ので合わない場合は数値を直接編集すればよい
+- トレ記録開始時、前回セットが目標reps範囲の上限を全セットで達成していた(かつ前回kg>0)場合、次回セットのkgを自動で+2.5kgして提案バッジを出す(`repsRangeMax()`、Workoutの`start()`内)。過負荷漸進の自動化で、意図的にkgそのものを書き換える(表示だけの提案ではない)ので合わない場合は数値を直接編集すればよい。自重・有酸素種目は対象外
 - ホーム画面に「直近7日の記録日数」ストリークチップを表示(`loggedDaysCount()`)。継続の可視化が目的で、判定は食事/体重/トレのいずれか1つでもあればその日は「記録あり」
 - 体重グラフ(履歴タブ)は実測点(薄いグレーの散布)と7日移動平均(グラデーションの太線)を重ねて表示する(`movingAverage()`)。日々のブレより傾向を見せる意図
 - AI相談は毎回 `buildContext()` で目標(当日該当分)・当日の全記録・直近7日サマリーをsystemプロンプトに注入する(ユーザーが状況説明しなくていいのがこのアプリの核)
@@ -70,7 +70,7 @@ src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出
 
 ## 現在の状態と直近の作業
 
-- 初回コミット(16ファイル)、kg対応、固定ルーティン反映、履歴の過去日編集、AI相談のGemini切り替え、食事記録のグラム数入力対応、食品リストの追加・削除UI、に続き、①重量アップ自動提案、②体重7日移動平均、③直近7日の記録ストリーク、を追加し、あわせて見た目を刷新(影・グラデーション・タブのアクティブ表示など)した(src/App.jsx, src/store.js, src/index.css)
+- 初回コミット(16ファイル)、kg対応、固定ルーティン反映、履歴の過去日編集、AI相談のGemini切り替え、食事記録のグラム数入力対応、食品リストの追加・削除UI、重量アップ自動提案/体重移動平均/記録ストリーク+見た目刷新、に続き、ジムメニューを固定A/Bから自由に追加・削除できるルーティン一覧に変更し(`menus`→`routines`、旧形式は自動移行)、自重種目(kgなし)にも対応した(src/data.js, src/store.js, src/App.jsx, src/ai.js)
 - 既存端末に保存済みのAPIキーはAnthropicのものなのでGeminiでは使えない。オーナーは設定画面でGoogle AI Studioのキーに入れ替える必要がある
 - 既存端末の実データでは、foods/mealSetsの新規デフォルトは自動マージされるが、menus(A/Bの種目構成)は自動反映されない。設定画面のジムメニュー欄に新しいテキストを貼り直してもらう必要がある
 
@@ -82,8 +82,8 @@ src/ai.js               AI相談のコンテキスト組み立てとAPI呼び出
 
 ## 今後のアイデア(未着手)
 
-- スケジュール(曜日→メニュー)を設定画面から編集可能に(現状 data.js のDEFAULT_SCHEDULE固定で、localStorage優先のため変更が反映しにくい)
 - 食品マスタの追加・削除は実装済み。既存項目の編集(名前やkcal/PFCの書き換え)UIはまだ無い(削除して追加し直す運用)
+- ルーティン・種目の追加・削除、曜日割り当ては実装済み。ルーティン名や既存種目の中身のリネーム/編集UIはまだ無い(削除して追加し直す運用)
 - 使用頻度による食品リストの並び替え
 - AI相談の回答から食事エントリを自動登録(例: PFC推定→そのまま記録)
 

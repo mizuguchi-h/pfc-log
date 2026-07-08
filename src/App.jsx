@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SLOTS } from './data'
 import {
-  loadState, saveState, todayKey, getLog, macrosOf, totalsOf,
-  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf, dayOfWeekOf, loggedDaysCount,
+  loadState, saveState, todayKey, getLog, macrosOf, totalsOf, normalizeState,
+  lastDates, lastSetsFor, uid, exportJSON, isTrainingDay, targetsOf, dayOfWeekOf, loggedDaysCount, routineNameOf,
 } from './store'
 import { buildContext, askGemini } from './ai'
 
@@ -52,7 +52,7 @@ export default function App() {
             patchLog={patchActive} editing={!!editDate} onExitEdit={exitHistoryEdit} />
         )}
         {tab === 'workout' && (
-          <Workout state={state} log={activeLog} dateKey={activeDate} patchLog={patchActive}
+          <Workout state={state} setState={setState} log={activeLog} dateKey={activeDate} patchLog={patchActive}
             editing={!!editDate} onExitEdit={exitHistoryEdit} />
         )}
         {tab === 'history' && (
@@ -90,7 +90,8 @@ export default function App() {
 
 function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
   const d = new Date()
-  const menuKey = state.schedule[d.getDay()] || null
+  const routineId = state.schedule[d.getDay()] || null
+  const routine = routineId ? state.routines.find((r) => r.id === routineId) : null
   const trainDay = isTrainingDay(state, dateKey)
   const target = targetsOf(state, dateKey)
   const remaining = target.kcal - totals.kcal
@@ -126,12 +127,12 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
       <section className="card">
         <div className="row between">
           <h2>今日のジム</h2>
-          {menuKey && <span className={`badge menu-${menuKey}`}>{menuKey}</span>}
+          {routine && <span className="badge">{routine.name}</span>}
         </div>
-        {menuKey ? (
+        {routine ? (
           <>
             <ul className="plainlist">
-              {state.menus[menuKey].exercises.map((ex) => (
+              {routine.exercises.map((ex) => (
                 <li key={ex.name}>
                   {ex.name}{' '}
                   <span className="muted">
@@ -147,7 +148,7 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
             </button>
           </>
         ) : (
-          <p className="muted">今日は休養日(火A・木B・土A)。トレタブから手動で始めることもできます。</p>
+          <p className="muted">今日は休養日です。トレタブから手動で始めることもできます。</p>
         )}
       </section>
 
@@ -417,13 +418,15 @@ const repsRangeMax = (reps) => {
   return nums.length ? Math.max(...nums) : null
 }
 
-function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
+function Workout({ state, setState, log, dateKey, patchLog, editing, onExitEdit }) {
+  const [showManage, setShowManage] = useState(false)
   const scheduled = state.schedule[dayOfWeekOf(dateKey)] || null
   const isToday = dateKey === todayKey()
   const dayLabel = isToday ? '今日' : dateKey
 
-  const start = (menuKey) => {
-    const exercises = state.menus[menuKey].exercises.map((ex) => {
+  const start = (routineId) => {
+    const routine = state.routines.find((r) => r.id === routineId)
+    const exercises = routine.exercises.map((ex) => {
       if (ex.type === 'cardio') {
         return {
           name: ex.name, type: 'cardio',
@@ -433,16 +436,20 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
       }
       const prev = lastSetsFor(state, ex.name, dateKey)
       const maxReps = repsRangeMax(ex.reps)
-      // 前回、目標回数の上限を全セットで達成していたら重量アップを提案(+2.5kg)
-      const suggestBump = !!prev && maxReps != null
+      // 前回、目標回数の上限を全セットで達成していたら重量アップを提案(+2.5kg)。自重種目は対象外
+      const suggestBump = ex.type !== 'bodyweight' && !!prev && maxReps != null
         && prev.every((s) => Number(s.reps) >= maxReps)
         && prev.some((s) => Number(s.kg) > 0)
       const sets = prev
-        ? prev.map((s) => ({ ...s, kg: s.kg === '' ? s.kg : Number(s.kg) + (suggestBump ? 2.5 : 0) }))
-        : Array.from({ length: ex.sets }, () => ({ kg: ex.kg ?? '', reps: repsDefault(ex.reps) }))
-      return { name: ex.name, repsTarget: ex.reps, sets, suggestBump }
+        ? prev.map((s) => (ex.type === 'bodyweight'
+            ? { reps: s.reps }
+            : { ...s, kg: s.kg === '' ? s.kg : Number(s.kg) + (suggestBump ? 2.5 : 0) }))
+        : Array.from({ length: ex.sets }, () => (
+            ex.type === 'bodyweight' ? { reps: repsDefault(ex.reps) } : { kg: ex.kg ?? '', reps: repsDefault(ex.reps) }
+          ))
+      return { name: ex.name, type: ex.type, repsTarget: ex.reps, sets, suggestBump }
     })
-    patchLog((l) => ({ ...l, workout: { menu: menuKey, exercises } }))
+    patchLog((l) => ({ ...l, workout: { menu: routineId, exercises } }))
   }
 
   const updateSet = (exIdx, setIdx, field, value) =>
@@ -493,16 +500,28 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
         <section className="card">
           <p className="muted">
             {scheduled
-              ? `${dayLabel}は「メニュー${scheduled}」の日です。`
-              : `${dayLabel}は予定なし(火A・木B・土A)。手動で始められます。`}
+              ? `${dayLabel}は「${routineNameOf(state, scheduled)}」の日です。`
+              : `${dayLabel}は予定なしの日です。手動で始められます。`}
           </p>
-          <div className="row">
-            {['A', 'B'].map((k) => (
-              <button key={k} className={scheduled === k ? 'primary wide' : 'ghost wide'} onClick={() => start(k)}>
-                メニュー{k}を始める
-              </button>
-            ))}
+          {state.routines.length > 0 ? (
+            <div className="col">
+              {state.routines.map((r) => (
+                <button key={r.id} className={scheduled === r.id ? 'primary wide' : 'ghost wide'} onClick={() => start(r.id)}>
+                  {r.name}を始める
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="muted small">ルーティンがまだありません。下の「ルーティンを管理」から追加してください。</p>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="row between">
+            <h2>ルーティン管理</h2>
+            <button className="ghost" onClick={() => setShowManage((v) => !v)}>{showManage ? '閉じる' : '編集する'}</button>
           </div>
+          {showManage && <RoutineManager state={state} setState={setState} />}
         </section>
       </div>
     )
@@ -511,7 +530,7 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
   return (
     <div className="page">
       <header className="pagehead">
-        <h1>メニュー{log.workout.menu} <span className={`badge menu-${log.workout.menu}`}>{log.workout.menu}</span></h1>
+        <h1>{routineNameOf(state, log.workout.menu)}</h1>
         <button className="ghost" onClick={clear}>削除</button>
       </header>
       {editing && (
@@ -537,6 +556,22 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
                 <span>完了</span>
               </label>
             </>
+          ) : ex.type === 'bodyweight' ? (
+            <>
+              {ex.repsTarget && <p className="muted small">目標 {ex.repsTarget}回(自重)</p>}
+              <div className="sethead-bw"><span>#</span><span>回数</span></div>
+              {ex.sets.map((st, j) => (
+                <div className="setrow-bw" key={j}>
+                  <span className="muted">{j + 1}</span>
+                  <input type="number" inputMode="numeric" value={st.reps}
+                    onChange={(e) => updateSet(i, j, 'reps', e.target.value)} />
+                </div>
+              ))}
+              <div className="row">
+                <button className="ghost" onClick={() => addSet(i)}>＋ セット</button>
+                {ex.sets.length > 1 && <button className="ghost" onClick={() => removeSet(i)}>− セット</button>}
+              </div>
+            </>
           ) : (
             <>
               {ex.suggestBump && <p className="suggest">💪 前回、目標回数を達成 → 重量を+2.5kgに調整しました</p>}
@@ -560,6 +595,124 @@ function Workout({ state, log, dateKey, patchLog, editing, onExitEdit }) {
         </section>
       ))}
       <p className="muted small">前回の重量が自動で入ります。記録は入力と同時に保存されます。</p>
+    </div>
+  )
+}
+
+// ルーティン(種目構成)の自由な追加・削除。曜日への割り当ては設定画面で行う
+function RoutineManager({ state, setState }) {
+  const [openRoutine, setOpenRoutine] = useState(null)
+  const [newRoutineName, setNewRoutineName] = useState('')
+  const emptyExForm = { type: 'weight', name: '', sets: '4', kg: '', reps: '', incline: '', speed: '', minutes: '' }
+  const [exForm, setExForm] = useState(emptyExForm)
+
+  const addRoutine = () => {
+    if (!newRoutineName.trim()) return
+    const id = uid()
+    setState((s) => ({ ...s, routines: [...s.routines, { id, name: newRoutineName.trim(), exercises: [] }] }))
+    setNewRoutineName('')
+    setOpenRoutine(id)
+  }
+
+  const deleteRoutine = (id) => {
+    if (!confirm('このルーティンを削除しますか?(曜日設定からも外れます)')) return
+    setState((s) => ({
+      ...s,
+      routines: s.routines.filter((r) => r.id !== id),
+      schedule: Object.fromEntries(Object.entries(s.schedule).filter(([, v]) => v !== id)),
+    }))
+    if (openRoutine === id) setOpenRoutine(null)
+  }
+
+  const addExercise = (routineId) => {
+    if (!exForm.name.trim()) return
+    const exercise = exForm.type === 'cardio'
+      ? { name: exForm.name.trim(), type: 'cardio', incline: Number(exForm.incline) || 0, speed: exForm.speed || '', minutes: Number(exForm.minutes) || 20 }
+      : exForm.type === 'bodyweight'
+        ? { name: exForm.name.trim(), type: 'bodyweight', sets: Number(exForm.sets) || 3, reps: exForm.reps || '10' }
+        : { name: exForm.name.trim(), sets: Number(exForm.sets) || 3, kg: Number(exForm.kg) || 0, reps: exForm.reps || '10' }
+    setState((s) => ({
+      ...s,
+      routines: s.routines.map((r) => (r.id === routineId ? { ...r, exercises: [...r.exercises, exercise] } : r)),
+    }))
+    setExForm({ ...emptyExForm, type: exForm.type })
+  }
+
+  const deleteExercise = (routineId, idx) =>
+    setState((s) => ({
+      ...s,
+      routines: s.routines.map((r) => (r.id === routineId ? { ...r, exercises: r.exercises.filter((_, i) => i !== idx) } : r)),
+    }))
+
+  return (
+    <div className="col">
+      {state.routines.map((r) => (
+        <div key={r.id}>
+          <div className="entry">
+            <button className="entry-main linklike" onClick={() => setOpenRoutine(openRoutine === r.id ? null : r.id)}>
+              <div>{r.name}</div>
+              <div className="muted small">{r.exercises.length}種目</div>
+            </button>
+            <button className="del" onClick={() => deleteRoutine(r.id)}>✕</button>
+          </div>
+          {openRoutine === r.id && (
+            <div className="dayedit">
+              {r.exercises.map((ex, i) => (
+                <div className="entry" key={i}>
+                  <div className="entry-main">
+                    <div>{ex.name}</div>
+                    <div className="muted small">
+                      {ex.type === 'cardio'
+                        ? `有酸素・傾斜${ex.incline}・速度${ex.speed}・${ex.minutes}分`
+                        : ex.type === 'bodyweight'
+                          ? `自重・${ex.sets}set×${ex.reps}回`
+                          : `${ex.sets}set×${ex.kg}kg×${ex.reps}回`}
+                    </div>
+                  </div>
+                  <button className="del" onClick={() => deleteExercise(r.id, i)}>✕</button>
+                </div>
+              ))}
+              <div className="customform">
+                <div className="seg">
+                  {[['weight', '重量'], ['bodyweight', '自重'], ['cardio', '有酸素']].map(([v, label]) => (
+                    <button key={v} className={exForm.type === v ? 'seg-btn active' : 'seg-btn'}
+                      onClick={() => setExForm({ ...exForm, type: v })}>{label}</button>
+                  ))}
+                </div>
+                <input placeholder="種目名(例: スクワット)" value={exForm.name}
+                  onChange={(e) => setExForm({ ...exForm, name: e.target.value })} />
+                {exForm.type === 'cardio' ? (
+                  <div className="grid4">
+                    <input type="number" inputMode="numeric" placeholder="傾斜" value={exForm.incline}
+                      onChange={(e) => setExForm({ ...exForm, incline: e.target.value })} />
+                    <input placeholder="速度" value={exForm.speed}
+                      onChange={(e) => setExForm({ ...exForm, speed: e.target.value })} />
+                    <input type="number" inputMode="numeric" placeholder="分" value={exForm.minutes}
+                      onChange={(e) => setExForm({ ...exForm, minutes: e.target.value })} />
+                  </div>
+                ) : (
+                  <div className="grid4">
+                    <input type="number" inputMode="numeric" placeholder="セット数" value={exForm.sets}
+                      onChange={(e) => setExForm({ ...exForm, sets: e.target.value })} />
+                    {exForm.type === 'weight' && (
+                      <input type="number" inputMode="decimal" placeholder="kg" value={exForm.kg}
+                        onChange={(e) => setExForm({ ...exForm, kg: e.target.value })} />
+                    )}
+                    <input placeholder="回数(例: 8〜10)" value={exForm.reps}
+                      onChange={(e) => setExForm({ ...exForm, reps: e.target.value })} />
+                  </div>
+                )}
+                <button className="primary wide" onClick={() => addExercise(r.id)}>種目を追加</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="row">
+        <input placeholder="新しいルーティン名(例: 上半身の日)" value={newRoutineName}
+          onChange={(e) => setNewRoutineName(e.target.value)} />
+        <button className="primary" onClick={addRoutine}>追加</button>
+      </div>
     </div>
   )
 }
@@ -602,7 +755,7 @@ function History({ state, patchDate, onEditMeals, onEditWorkout }) {
                   <>
                     <span className={over ? 'over' : ''}>{Math.round(t.kcal)}kcal</span>
                     <span className="muted small">P{Math.round(t.p)}/F{Math.round(t.f)}/C{Math.round(t.c)}</span>
-                    <span>{l.workout ? `🏋️${l.workout.menu}` : ''}</span>
+                    <span>{l.workout ? '🏋️' : ''}</span>
                     <span className="muted small">{l.weight ? `${l.weight}kg` : ''}</span>
                   </>
                 ) : (
@@ -611,6 +764,7 @@ function History({ state, patchDate, onEditMeals, onEditWorkout }) {
               </div>
               {openDay === k && (
                 <div className="dayedit">
+                  {l?.workout && <p className="muted small">トレ: {routineNameOf(state, l.workout.menu)}</p>}
                   <div className="row">
                     <input type="number" inputMode="decimal" step="0.1" placeholder="体重kg"
                       value={l?.weight ?? ''}
@@ -745,29 +899,8 @@ function Chat({ state, setState, dateKey, openSettings }) {
 
 function Settings({ state, setState, close }) {
   const [s, setS] = useState(state.settings)
-  const exerciseLine = (e) => e.type === 'cardio'
-    ? `${e.name}, cardio, ${e.incline}, ${e.speed}, ${e.minutes}`
-    : `${e.name}, ${e.sets}, ${e.kg ?? 0}, ${e.reps}`
-  const [menuText, setMenuText] = useState({
-    A: state.menus.A.exercises.map(exerciseLine).join('\n'),
-    B: state.menus.B.exercises.map(exerciseLine).join('\n'),
-  })
+  const [sched, setSched] = useState(state.schedule)
   const fileRef = useRef(null)
-
-  const parseMenu = (text) =>
-    text.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-      const parts = line.split(',').map((x) => x.trim())
-      if (parts[1] === 'cardio') {
-        const [name, , incline, speed, minutes] = parts
-        return { name, type: 'cardio', incline: Number(incline) || 0, speed: speed || '', minutes: Number(minutes) || 20 }
-      }
-      if (parts.length >= 4) {
-        const [name, sets, kg, reps] = parts
-        return { name, sets: Number(sets) || 3, kg: Number(kg) || 0, reps: reps || '10' }
-      }
-      const [name, sets, reps] = parts
-      return { name, sets: Number(sets) || 3, kg: 0, reps: reps || '10' }
-    })
 
   const saveAll = () => {
     setState((st) => ({
@@ -783,10 +916,7 @@ function Settings({ state, setState, close }) {
         fTargetOff: Number(s.fTargetOff) || 40,
         cTargetOff: Number(s.cTargetOff) || 165,
       },
-      menus: {
-        A: { ...st.menus.A, exercises: parseMenu(menuText.A) },
-        B: { ...st.menus.B, exercises: parseMenu(menuText.B) },
-      },
+      schedule: Object.fromEntries(Object.entries(sched).filter(([, v]) => v)),
     }))
     close()
   }
@@ -800,7 +930,7 @@ function Settings({ state, setState, close }) {
         const data = JSON.parse(reader.result)
         if (!data.logs) throw new Error('形式が違います')
         if (confirm('現在のデータをバックアップの内容で上書きします。よろしいですか?')) {
-          setState(data)
+          setState(normalizeState(data))
           close()
         }
       } catch (err) {
@@ -840,14 +970,21 @@ function Settings({ state, setState, close }) {
           ))}
         </div>
 
-        <h2>ジムメニュー(1行 = 種目名, セット数, kg, 回数 / 有酸素は 種目名, cardio, 傾斜, 速度, 分)</h2>
-        {['A', 'B'].map((k) => (
-          <label key={k} className="field">
-            <span className="muted small">メニュー{k}</span>
-            <textarea rows={5} value={menuText[k]}
-              onChange={(e) => setMenuText({ ...menuText, [k]: e.target.value })} />
-          </label>
-        ))}
+        <h2>曜日ごとのジムメニュー</h2>
+        <div className="col">
+          {[0, 1, 2, 3, 4, 5, 6].map((dow) => (
+            <div className="row between" key={dow}>
+              <span className="muted small">{DOW[dow]}曜日</span>
+              <select value={sched[dow] || ''} onChange={(e) => setSched({ ...sched, [dow]: e.target.value || undefined })}>
+                <option value="">オフ日</option>
+                {state.routines.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+        <p className="muted small">種目の追加・削除は「トレ」タブの「ルーティン管理」から行えます。</p>
 
         <h2>AI相談(Google Gemini APIキー)</h2>
         <input type="password" placeholder="AQ.Ab... または AIza..." value={s.apiKey}

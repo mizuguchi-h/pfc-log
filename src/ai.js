@@ -1,5 +1,7 @@
-import { getLog, totalsOf, lastDates, macrosOf, isTrainingDay, targetsOf } from './store'
+import { getLog, totalsOf, lastDates, macrosOf, isTrainingDay, targetsOf, routineNameOf } from './store'
 import { SLOTS } from './data'
+
+const DOW = ['日', '月', '火', '水', '木', '金', '土']
 
 // 直近の記録からAIに渡すコンテキストを組み立てる
 export function buildContext(state, dateKey) {
@@ -17,12 +19,16 @@ export function buildContext(state, dateKey) {
   let workoutLines = []
   if (log.workout) {
     workoutLines = [
-      `メニュー${log.workout.menu}:`,
-      ...log.workout.exercises.map((ex) =>
-        ex.type === 'cardio'
-          ? `- ${ex.name}: ${ex.done ? '実施済み' : '未実施'}(${ex.minutes || ex.targetMinutes}分, 傾斜${ex.incline}, 速度${ex.speed})`
-          : `- ${ex.name}: ${ex.sets.map((st) => `${st.kg}kg×${st.reps}`).join(', ')}`
-      ),
+      `${routineNameOf(state, log.workout.menu)}:`,
+      ...log.workout.exercises.map((ex) => {
+        if (ex.type === 'cardio') {
+          return `- ${ex.name}: ${ex.done ? '実施済み' : '未実施'}(${ex.minutes || ex.targetMinutes}分, 傾斜${ex.incline}, 速度${ex.speed})`
+        }
+        if (ex.type === 'bodyweight') {
+          return `- ${ex.name}(自重): ${ex.sets.map((st) => `${st.reps}回`).join(', ')}`
+        }
+        return `- ${ex.name}: ${ex.sets.map((st) => `${st.kg}kg×${st.reps}`).join(', ')}`
+      }),
     ]
   }
 
@@ -32,17 +38,23 @@ export function buildContext(state, dateKey) {
       if (!l) return null
       const tt = totalsOf(l, state.foods)
       const w = l.weight ? ` 体重${l.weight}kg` : ''
-      const g = l.workout ? ` ジム${l.workout.menu}` : ''
+      const g = l.workout ? ` ジム${routineNameOf(state, l.workout.menu)}` : ''
       return `${k}: ${Math.round(tt.kcal)}kcal (P${Math.round(tt.p)}/F${Math.round(tt.f)}/C${Math.round(tt.c)})${w}${g}`
     })
     .filter(Boolean)
+
+  const routineSummary = state.routines.map((r) => r.name).join(' / ') || '未設定'
+  const scheduleSummary = Object.entries(state.schedule)
+    .map(([dow, id]) => `${DOW[dow]}${routineNameOf(state, id)}`)
+    .join('・') || 'なし'
 
   return [
     `あなたはユーザー専属のダイエット・筋トレコーチです。簡潔に、実用的に日本語で答えてください。`,
     ``,
     `## 目標(今日は${trainDay ? 'トレーニング日' : 'オフ日'})`,
     `1日 ${target.kcal}kcal / P ${target.p}g / F ${target.f}g / C ${target.c}g`,
-    `トレーニング: 全身法A(ベンチ重視)/B(バランス重視)の2分割、週3(火A・木B・土A)`,
+    `トレーニングルーティン: ${routineSummary}`,
+    `スケジュール: ${scheduleSummary}`,
     ``,
     `## 今日 (${dateKey}) の記録`,
     `合計: ${Math.round(t.kcal)}kcal / P ${t.p.toFixed(1)}g / F ${t.f.toFixed(1)}g / C ${t.c.toFixed(1)}g`,

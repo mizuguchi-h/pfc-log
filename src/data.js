@@ -29,9 +29,14 @@ export const DEFAULT_FOODS = [
   { id: 'f24', name: 'ご飯 120g', kcal: 187, p: 3.0, f: 0.4, c: 42.7, unitGrams: 120 },
 ]
 
-// 種目は sets/kg/reps(通常種目) か type:'cardio' + incline/speed/minutes(有酸素) のいずれか
-export const DEFAULT_MENUS = {
-  A: {
+// 種目は3種類:
+//   通常(重量あり): { sets, kg, reps }
+//   自重(kgなし):    { type: 'bodyweight', sets, reps }
+//   有酸素:          { type: 'cardio', incline, speed, minutes }
+// reps は "8〜10" のような範囲文字列
+export const DEFAULT_ROUTINES = [
+  {
+    id: 'A',
     name: '全身法A(ベンチ重視)',
     exercises: [
       { name: 'ベンチプレス', sets: 4, kg: 30, reps: '8〜10' },
@@ -39,11 +44,12 @@ export const DEFAULT_MENUS = {
       { name: 'レッグプレス', sets: 4, kg: 60, reps: '10〜12' },
       { name: 'ショルダープレス', sets: 3, kg: 15, reps: '10〜12' },
       { name: 'トライセプスエクステンション', sets: 3, kg: 15, reps: '12〜15' },
-      { name: 'レッグレイズ', sets: 3, kg: 0, reps: '12〜15' },
+      { name: 'レッグレイズ', type: 'bodyweight', sets: 3, reps: '12〜15' },
       { name: 'ウォーキング', type: 'cardio', incline: 12, speed: '4.5〜5', minutes: 20 },
     ],
   },
-  B: {
+  {
+    id: 'B',
     name: '全身法B(バランス重視)',
     exercises: [
       { name: 'チェストプレス', sets: 4, kg: 30, reps: '8〜12' },
@@ -52,13 +58,13 @@ export const DEFAULT_MENUS = {
       { name: 'レッグカール', sets: 4, kg: 20, reps: '10〜12' },
       { name: 'サイドレイズ', sets: 4, kg: 5, reps: '10〜12' },
       { name: 'アブドミナル', sets: 3, kg: 20, reps: '10〜12' },
-      { name: 'レッグレイズ', sets: 3, kg: 0, reps: '12' },
+      { name: 'レッグレイズ', type: 'bodyweight', sets: 3, reps: '12' },
       { name: 'ウォーキング', type: 'cardio', incline: 12, speed: '4.5〜5', minutes: 20 },
     ],
   },
-}
+]
 
-// 曜日 → メニュー (0=日, 1=月, 2=火, ...)。それ以外はオフ日
+// 曜日 → ルーティンid (0=日, 1=月, 2=火, ...)。それ以外はオフ日
 export const DEFAULT_SCHEDULE = { 2: 'A', 4: 'B', 6: 'A' }
 
 export const DEFAULT_SETTINGS = {
