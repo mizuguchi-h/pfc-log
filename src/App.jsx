@@ -125,6 +125,36 @@ function Home({ state, log, totals, dateKey, patchLog, openSettings, goto }) {
       </section>
 
       <section className="card">
+        <h2>今日の食事</h2>
+        {log.meals.length === 0 ? (
+          <p className="muted small">まだ記録がありません。「食事」タブから追加できます。</p>
+        ) : (
+          SLOTS.map((sl) => {
+            const entries = log.meals.filter((e) => e.slot === sl.key)
+            if (!entries.length) return null
+            return (
+              <div key={sl.key} className="homemeal-slot">
+                <div className="muted small homemeal-label">{sl.label}</div>
+                {entries.map((e) => {
+                  const m = macrosOf(e, state.foods)
+                  return (
+                    <div className="entry" key={e.id}>
+                      <div className="entry-main">
+                        <div>{m.name}</div>
+                        <div className="muted small">
+                          {Math.round(m.kcal)}kcal / P{m.p.toFixed(1)} F{m.f.toFixed(1)} C{m.c.toFixed(1)}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })
+        )}
+      </section>
+
+      <section className="card">
         <div className="row between">
           <h2>今日のジム</h2>
           {routine && <span className="badge">{routine.name}</span>}

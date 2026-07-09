@@ -111,6 +111,12 @@ h2 { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px
 
 .plainlist { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 
+/* ---- ホームの今日の食事一覧 ---- */
+.homemeal-slot { margin-bottom: 6px; }
+.homemeal-slot:last-child { margin-bottom: 0; }
+.homemeal-label { font-weight: 700; margin: 6px 0 2px; }
+.homemeal-slot:first-child .homemeal-label { margin-top: 0; }
+
 /* ---- ボタン / 入力 ---- */
 button {
   font: inherit; border: none; border-radius: 12px; cursor: pointer;
