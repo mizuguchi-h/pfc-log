@@ -111,16 +111,6 @@ h2 { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 10px
 
 .plainlist { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 
-/* ---- トレの重量アップ提案 ---- */
-.suggest {
-  background: linear-gradient(135deg, rgba(53, 208, 164, 0.16), rgba(53, 208, 164, 0.05));
-  border: 1px solid rgba(53, 208, 164, 0.4);
-  color: var(--p);
-  font-size: 12.5px; font-weight: 700;
-  padding: 9px 11px; border-radius: 10px;
-  margin-bottom: 10px;
-}
-
 /* ---- ボタン / 入力 ---- */
 button {
   font: inherit; border: none; border-radius: 12px; cursor: pointer;

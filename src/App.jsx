@@ -412,12 +412,6 @@ const repsDefault = (reps) => {
   return Number.isNaN(n) ? 10 : n
 }
 
-// 目標reps表記から上限の回数を取り出す(例: "8〜10" → 10, "12" → 12)
-const repsRangeMax = (reps) => {
-  const nums = String(reps).match(/\d+/g)?.map(Number) || []
-  return nums.length ? Math.max(...nums) : null
-}
-
 function Workout({ state, setState, log, dateKey, patchLog, editing, onExitEdit }) {
   const [showManage, setShowManage] = useState(false)
   const scheduled = state.schedule[dayOfWeekOf(dateKey)] || null
@@ -435,19 +429,12 @@ function Workout({ state, setState, log, dateKey, patchLog, editing, onExitEdit 
         }
       }
       const prev = lastSetsFor(state, ex.name, dateKey)
-      const maxReps = repsRangeMax(ex.reps)
-      // 前回、目標回数の上限を全セットで達成していたら重量アップを提案(+2.5kg)。自重種目は対象外
-      const suggestBump = ex.type !== 'bodyweight' && !!prev && maxReps != null
-        && prev.every((s) => Number(s.reps) >= maxReps)
-        && prev.some((s) => Number(s.kg) > 0)
       const sets = prev
-        ? prev.map((s) => (ex.type === 'bodyweight'
-            ? { reps: s.reps }
-            : { ...s, kg: s.kg === '' ? s.kg : Number(s.kg) + (suggestBump ? 2.5 : 0) }))
+        ? prev.map((s) => (ex.type === 'bodyweight' ? { reps: s.reps } : { ...s }))
         : Array.from({ length: ex.sets }, () => (
             ex.type === 'bodyweight' ? { reps: repsDefault(ex.reps) } : { kg: ex.kg ?? '', reps: repsDefault(ex.reps) }
           ))
-      return { name: ex.name, type: ex.type, repsTarget: ex.reps, sets, suggestBump }
+      return { name: ex.name, type: ex.type, repsTarget: ex.reps, sets }
     })
     patchLog((l) => ({ ...l, workout: { menu: routineId, exercises } }))
   }
@@ -574,7 +561,6 @@ function Workout({ state, setState, log, dateKey, patchLog, editing, onExitEdit 
             </>
           ) : (
             <>
-              {ex.suggestBump && <p className="suggest">💪 前回、目標回数を達成 → 重量を+2.5kgに調整しました</p>}
               {ex.repsTarget && <p className="muted small">目標 {ex.repsTarget}回</p>}
               <div className="sethead"><span>#</span><span>kg</span><span>回数</span></div>
               {ex.sets.map((st, j) => (
